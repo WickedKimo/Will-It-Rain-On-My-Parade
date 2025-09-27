@@ -1,0 +1,26 @@
+{
+  "23.97_120.97_2025-09-28": {
+    "temp": 30,
+    "rainChance": 40,
+    "snowChance": 0,
+    "precipitation": 5,
+    "wind": 5,
+    "airQuality": "Moderate",
+    "uvIndex": 7,
+    "humidity": 60,
+    "cloudCover": 50,
+    "feelsLike": 32
+  },
+  "24.00_121.00_2025-09-28": {
+    "temp": 28,
+    "rainChance": 20,
+    "snowChance": 0,
+    "precipitation": 2,
+    "wind": 4,
+    "airQuality": "Good",
+    "uvIndex": 6,
+    "humidity": 55,
+    "cloudCover": 40,
+    "feelsLike": 29
+  }
+}
