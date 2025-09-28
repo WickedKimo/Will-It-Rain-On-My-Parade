@@ -1,11 +1,11 @@
 // app/show_weather.tsx
-// http://localhost:8081/show_weather?lat=23.97&lng=120.97&date=2025-09-28
 import { AntDesign } from "@expo/vector-icons";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
+  Dimensions,
   Platform,
   Pressable,
   SafeAreaView,
@@ -16,6 +16,7 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
+import { BarChart, LineChart } from "react-native-chart-kit";
 
 import weatherData from "./data/example.json";
 
@@ -23,7 +24,6 @@ import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import html2canvas from "html2canvas";
 import { captureRef } from "react-native-view-shot";
-
 
 type WeatherData = {
   temp: number;
@@ -35,7 +35,13 @@ type WeatherData = {
   uvIndex: number;
   humidity: number;
   cloudCover: number;
+  date?: string; // Add date for easier reference
 };
+
+function getMonthDay(dateStr: string) {
+  const d = dateStr.replace("_", "-").replace(/\//g, "-").split("-");
+  return d.length === 3 ? `${d[1]}-${d[2]}` : "";
+}
 
 type RowItem = {
   key: string;
@@ -50,31 +56,73 @@ export default function ShowWeatherScreen() {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
-  const [settingsVisible, setSettingsVisible] = useState<Record<string, boolean>>({});
-
-  // For opacity animation
   const animationValues = useRef<Record<string, Animated.Value>>({}).current;
+  const screenRef = useRef<View>(null);
 
   // User preferences
   const [useFahrenheit, setUseFahrenheit] = useState(false);
   const [useDewPoint, setUseDewPoint] = useState(false);
   const [useMiles, setUseMiles] = useState(false);
-  const screenRef = useRef<View>(null);
+
+  // Bottom settings panel
+  const [settingsVisible, setSettingsVisible] = useState(false);
+  const settingsAnim = useRef(new Animated.Value(0)).current;
+
+  const [weatherList, setWeatherList] = useState<WeatherData[]>([]);
 
   useEffect(() => {
-    const key = `${lat}_${lng}_${date}`;
-    const currentWeather = weatherData[key as keyof typeof weatherData] || {
-      temp: NaN,
-      rainChance: 0,
-      snowChance: 0,
-      precipitation: 0,
-      wind: 0,
-      airQuality: "Unknown",
-      uvIndex: 0,
-      humidity: 0,
-      cloudCover: 0
+    const targetMonthDay = getMonthDay(date);
+    const matches: WeatherData[] = [];
+
+    Object.entries(weatherData).forEach(([key, value]) => {
+      const [kLat, kLng, kDate] = key.split("_");
+      if (
+        kLat === lat &&
+        kLng === lng &&
+        getMonthDay(kDate) === targetMonthDay
+      ) {
+        matches.push({ ...(value as WeatherData), date: kDate });
+      }
+    });
+
+    if (matches.length === 0) {
+      matches.push({
+        temp: NaN,
+        rainChance: 0,
+        snowChance: 0,
+        precipitation: 0,
+        wind: 0,
+        airQuality: "Unknown",
+        uvIndex: 0,
+        humidity: 0,
+        cloudCover: 0,
+        date,
+      });
+    }
+
+    // Sort by year
+    matches.sort((a, b) => {
+      if (!a.date || !b.date) return 0;
+      return a.date.localeCompare(b.date);
+    });
+
+    setWeatherList(matches);
+
+    const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+    const weatherAvg: WeatherData = {
+      temp: avg(matches.map(w => w.temp)),
+      rainChance: avg(matches.map(w => w.rainChance)),
+      snowChance: avg(matches.map(w => w.snowChance)),
+      precipitation: avg(matches.map(w => w.precipitation)),
+      wind: avg(matches.map(w => w.wind)),
+      airQuality: matches[0].airQuality,
+      uvIndex: avg(matches.map(w => w.uvIndex)),
+      humidity: avg(matches.map(w => w.humidity)),
+      cloudCover: avg(matches.map(w => w.cloudCover)),
+      date,
     };
-    setWeather(currentWeather);
+
+    setWeather(weatherAvg);
     setLoading(false);
   }, [lat, lng, date]);
 
@@ -84,6 +132,7 @@ export default function ShowWeatherScreen() {
     const e = (humidity / 100) * 6.105 * Math.exp((17.27 * tempC) / (237.7 + tempC));
     return 1.04 * tempC + 0.2 * e - 0.65 * wind - 2.7;
   }
+
   function magnusDewPoint(tempC: number, humidity: number) {
     const a = 17.27;
     const b = 237.7;
@@ -95,15 +144,13 @@ export default function ShowWeatherScreen() {
   const convertPrecipitation = (val: number) => (useMiles ? val * 0.03937 : val).toFixed(1);
   const convertHumidity = (val: number) => (useDewPoint ? magnusDewPoint(weather!.temp, val) : val).toFixed(1);
 
-  let rows: RowItem[] = [
+  const rows: RowItem[] = [
     {
       key: "氣溫",
       value: convertTemp(weather!.temp),
       details: {
         "單位": useFahrenheit ? "°F" : "°C",
-        "體感溫度":
-          convertTemp(steadmanApparentTemp(weather!.temp, weather!.humidity, weather!.wind)) +
-          " " + (useFahrenheit ? "°F" : "°C"),
+        "體感溫度": convertTemp(steadmanApparentTemp(weather!.temp, weather!.humidity, weather!.wind)) + " " + (useFahrenheit ? "°F" : "°C"),
         "說明": "體感溫度根據氣溫、濕度與風速計算得出"
       },
     },
@@ -177,10 +224,6 @@ export default function ShowWeatherScreen() {
     });
   };
 
-  const toggleSettings = (key: string) => {
-    setSettingsVisible((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
   async function shareAsJson() {
     if (!weather) return;
     const fileUri = (FileSystem as any).cacheDirectory + `weather_${lat}_${lng}_${date}.json`;
@@ -194,10 +237,7 @@ export default function ShowWeatherScreen() {
 
   async function shareScreenshot() {
     try {
-      const uri = await captureRef(screenRef, {
-        format: "png",
-        quality: 0.9,
-      });
+      const uri = await captureRef(screenRef, { format: "png", quality: 0.9 });
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri);
       } else {
@@ -236,10 +276,40 @@ export default function ShowWeatherScreen() {
     }
   }
 
+  function getTempDistributionChartData(weatherList: WeatherData[], useF: boolean) {
+    const binWidth = useF ? 9 : 5;
+    const temps = weatherList
+      .map(w => useF ? w.temp * 1.8 + 32 : w.temp)
+      .filter(t => !isNaN(t));
+    if (temps.length === 0) {
+      return { labels: [], datasets: [{ data: [] }] };
+    }
+    const min = Math.floor(Math.min(...temps) / binWidth) * binWidth + (useF ? 5 : 0);
+    const max = Math.ceil(Math.max(...temps) / binWidth) * binWidth;
+    const bins: number[] = [];
+    const labels: string[] = [];
+    for (let t = min; t < max; t += binWidth) {
+      bins.push(t);
+      labels.push(`${t}~${t + binWidth}${useF ? "°F" : "°C"}`);
+    }
+    bins.push(max);
+    labels.push(`${max}${useF ? "°F" : "°C"}`);
+
+    const counts = bins.map((bin, i) =>
+      temps.filter(
+        t =>
+          t >= bin &&
+          (i === bins.length - 1 ? t <= bin + binWidth : t < bin + binWidth)
+      ).length
+    );
+    return {
+      labels,
+      datasets: [{ data: counts }],
+    };
+  }
+
   const renderRow = (item: RowItem) => {
     const isExpanded = !!expandedRows[item.key];
-    const showSettings = !!settingsVisible[item.key];
-
     if (!animationValues[item.key]) animationValues[item.key] = new Animated.Value(isExpanded ? 1 : 0);
 
     const rotate = animationValues[item.key].interpolate({
@@ -251,6 +321,9 @@ export default function ShowWeatherScreen() {
       inputRange: [0, 1],
       outputRange: [0, 1],
     });
+
+    const showTempChart = item.key === "氣溫" && weatherList.length > 1 && isExpanded;
+    const showTempDistChart = item.key === "氣溫" && weatherList.length > 1 && isExpanded;
 
     return (
       <View key={item.key} style={styles.rowContainer}>
@@ -265,34 +338,7 @@ export default function ShowWeatherScreen() {
             {item.key}: {typeof item.value === "number" ? item.value.toFixed(1) : item.value}
             {item.details["單位"] ? ` ${item.details["單位"]}` : ""}
           </Text>
-
-          <Pressable onPress={() => toggleSettings(item.key)} style={[styles.iconTouch, { marginLeft: "auto" }]}> 
-            <AntDesign name="setting" size={20} color="#007AFF" />
-          </Pressable>
         </View>
-
-        {showSettings && (
-          <View style={styles.settingsContainer}>
-            {item.key === "氣溫" && (
-              <View style={styles.settingRow}>
-                <Text>Use Fahrenheit</Text>
-                <Switch value={useFahrenheit} onValueChange={setUseFahrenheit} />
-              </View>
-            )}
-            {item.key === "濕度" && (
-              <View style={styles.settingRow}>
-                <Text>Show Dew Point</Text>
-                <Switch value={useDewPoint} onValueChange={setUseDewPoint} />
-              </View>
-            )}
-            {item.key === "降水量" && (
-              <View style={styles.settingRow}>
-                <Text>Use Inches</Text>
-                <Switch value={useMiles} onValueChange={setUseMiles} />
-              </View>
-            )}
-          </View>
-        )}
 
         {isExpanded && item.details && Object.keys(item.details).length > 0 && (
           <Animated.View style={[styles.detailsContainer, { opacity: fadeAnim }]}>
@@ -301,37 +347,129 @@ export default function ShowWeatherScreen() {
                 {k}: {typeof v === "number" ? v.toFixed(1) : v}
               </Text>
             ))}
+            {showTempChart && (
+              <View style={{ marginTop: 10, marginBottom: 5 }}>
+                <Text style={{ fontSize: 15, marginBottom: 5 }}>歷年同日氣溫</Text>
+                <LineChart
+                  data={{
+                    labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
+                    datasets: [
+                      {
+                        data: weatherList.map(w => useFahrenheit ? w.temp * 1.8 + 32 : w.temp),
+                        color: () => "#007AFF",
+                        strokeWidth: 2,
+                      },
+                    ],
+                  }}
+                  width={Platform.OS === "web" ? 500 : Dimensions.get("window").width - 80}
+                  height={250}
+                  yAxisSuffix={useFahrenheit ? "°F" : "°C"}
+                  chartConfig={{
+                    backgroundColor: "#fff",
+                    backgroundGradientFrom: "#fff",
+                    backgroundGradientTo: "#fff",
+                    decimalPlaces: 1,
+                    color: (opacity = 1) => `rgba(0,122,255,${opacity})`,
+                    labelColor: (opacity = 1) => `rgba(0,0,0,${opacity})`,
+                    style: { borderRadius: 8 },
+                    propsForDots: { r: "4", strokeWidth: "2", stroke: "#007AFF" },
+                  }}
+                  bezier
+                  style={{ borderRadius: 8 }}
+                />
+              </View>
+            )}
+            {showTempDistChart && (
+              <View style={{ marginTop: 10, marginBottom: 5 }}>
+                <Text style={{ fontSize: 15, marginBottom: 5 }}>氣溫分布圖</Text>
+                <BarChart
+                  data={getTempDistributionChartData(weatherList, useFahrenheit)}
+                  width={Platform.OS === "web" ? 500 : Dimensions.get("window").width - 80}
+                  height={220}
+                  yAxisLabel=""
+                  yAxisSuffix=""
+                  chartConfig={{
+                    backgroundColor: "#fff",
+                    backgroundGradientFrom: "#fff",
+                    backgroundGradientTo: "#fff",
+                    decimalPlaces: 0,
+                    color: (opacity = 1) => `rgba(0,122,255,${opacity})`,
+                    labelColor: (opacity = 1) => `rgba(0,0,0,${opacity})`,
+                    style: { borderRadius: 8 },
+                  }}
+                  style={{ borderRadius: 8 }}
+                  fromZero
+                  showValuesOnTopOfBars
+                />
+              </View>
+            )}
           </Animated.View>
         )}
       </View>
     );
   };
 
-  if (Platform.OS === 'web') {
-    return (
-      <SafeAreaView style={{ flex: 1 }} ref={screenRef}>
-        <div style={{
-          position: "fixed",
-          top: 10,
-          right: 10,
-          display: "flex",
-          gap: "8px",
-          zIndex: 1000
-        }}>
-          <button onClick={downloadJsonWeb}>獲得JSON</button>
-          <button onClick={downloadScreenshotWeb}>截圖</button>
-        </div>
+  const toggleSettingsPanel = () => {
+    Animated.timing(settingsAnim, {
+      toValue: settingsVisible ? 0 : 1,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+    setSettingsVisible(!settingsVisible);
+  };
 
-        <div id="weather-container" style={{ overflowY: 'auto', height: '100vh', padding: 10 }}>
-          <Text style={{ fontSize: 18, marginBottom: 10 }}>
-            天氣資訊 ({date}){"\n"}
-            經度 {lng} 緯度 {lat}
-          </Text>
-          {rows.map((item) => renderRow(item))}
-        </div>
-      </SafeAreaView>
+  const SettingsPanel = () => {
+    const panelHeight = 150;
+    const translateY = settingsAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [panelHeight, 0],
+    });
+
+    return (
+      <Animated.View
+        style={[
+          styles.bottomSettings,
+          {
+            height: panelHeight,
+            opacity: settingsAnim,
+            transform: [{ translateY }],
+          },
+        ]}
+      >
+        <View style={styles.settingRow}>
+          <Text>Use Fahrenheit</Text>
+          <Switch value={useFahrenheit} onValueChange={setUseFahrenheit} />
+        </View>
+        <View style={styles.settingRow}>
+          <Text>Show Dew Point</Text>
+          <Switch value={useDewPoint} onValueChange={setUseDewPoint} />
+        </View>
+        <View style={styles.settingRow}>
+          <Text>Use Inches</Text>
+          <Switch value={useMiles} onValueChange={setUseMiles} />
+        </View>
+      </Animated.View>
     );
-  }
+  };
+
+  const chartData = {
+    labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
+    datasets: [
+      {
+        data: weatherList.map(w => useFahrenheit ? w.temp * 1.8 + 32 : w.temp),
+        color: () => "#007AFF",
+        strokeWidth: 2,
+      },
+    ],
+  };
+
+  const btnPanelHeight = 150;
+  const btnHeight = 20;
+  const btnBottom = settingsAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [btnHeight, btnPanelHeight],
+  });
+
   return (
     <SafeAreaView style={{ flex: 1 }} ref={screenRef}>
       <View style={styles.fixedButtons}>
@@ -349,14 +487,46 @@ export default function ShowWeatherScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={{ padding: 10 }} contentContainerStyle={{ paddingBottom: 50 }}>
-        <View id="weather-container">
-          <Text style={{ fontSize: 18, marginBottom: 10 }}>
-            天氣資訊 ({date}) - 緯度 {lat}, 經度 {lng}
+      {Platform.OS === "web" ? (
+        <div style={{ overflowY: "auto", height: "100vh", padding: 10 }}>
+          <View id="weather-container">
+            <Text style={{ fontSize: 18, marginBottom: 10 }}>
+              天氣資訊 ({date}) -{"\n"}緯度 {lat}, 經度 {lng}
+            </Text>
+            {rows.map((item) => renderRow(item))}
+          </View>
+        </div>
+      ) : (
+        <ScrollView
+          style={{ flex: 1, minHeight: 0, padding: 10 }}
+          contentContainerStyle={{ paddingBottom: 50 }}
+        >
+          <View id="weather-container">
+            <Text style={{ fontSize: 18, marginBottom: 10 }}>
+              天氣資訊 ({date}) -{"\n"}緯度 {lat}, 經度 {lng}
+            </Text>
+            {rows.map((item) => renderRow(item))}
+          </View>
+        </ScrollView>
+      )}
+
+      <Animated.View
+        style={[
+          { position: "absolute", left: 0, right: 0, zIndex: 1001, bottom: btnBottom }
+        ]}
+      >
+        <TouchableOpacity
+          style={styles.toggleSettingsBtn}
+          onPress={toggleSettingsPanel}
+          activeOpacity={0.7}
+        >
+          <Text style={{ color: "#007AFF", fontWeight: "bold" }}>
+            {settingsVisible ? "隱藏設定" : "顯示設定"}
           </Text>
-          {rows.map((item) => renderRow(item))}
-        </View>
-      </ScrollView>
+        </TouchableOpacity>
+      </Animated.View>
+
+      <SettingsPanel />
     </SafeAreaView>
   );
 }
@@ -396,17 +566,6 @@ const styles = StyleSheet.create({
     color: "#333",
     marginBottom: 2,
   },
-  settingsContainer: {
-    backgroundColor: "#fff3e6",
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-  },
-  settingRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 5,
-  },
   fixedButtons: {
     position: "absolute",
     top: 10,
@@ -425,5 +584,32 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 14,
     fontWeight: "bold",
+  },
+  bottomSettings: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "#fff",
+    paddingHorizontal: 20,
+    borderTopWidth: 1,
+    borderTopColor: "#ddd",
+    overflow: "hidden",
+    zIndex: 1000,
+  },
+  settingRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+    paddingVertical: 5,
+  },
+  toggleSettingsBtn: {
+    alignItems: "center",
+    paddingVertical: 5,
+    backgroundColor: "#f2f2f2",
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: "#ddd",
   },
 });
