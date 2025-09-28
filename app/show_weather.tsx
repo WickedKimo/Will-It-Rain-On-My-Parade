@@ -13,10 +13,17 @@ import {
   StyleSheet,
   Switch,
   Text,
-  View,
+  TouchableOpacity,
+  View
 } from "react-native";
 
 import weatherData from "./data/example.json";
+
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
+import html2canvas from "html2canvas";
+import { captureRef } from "react-native-view-shot";
+
 
 type WeatherData = {
   temp: number;
@@ -52,6 +59,7 @@ export default function ShowWeatherScreen() {
   const [useFahrenheit, setUseFahrenheit] = useState(false);
   const [useDewPoint, setUseDewPoint] = useState(false);
   const [useMiles, setUseMiles] = useState(false);
+  const screenRef = useRef<View>(null);
 
   useEffect(() => {
     const key = `${lat}_${lng}_${date}`;
@@ -83,9 +91,9 @@ export default function ShowWeatherScreen() {
     return (b * alpha) / (a - alpha);
   }
 
-  const convertTemp = (val: number) => (useFahrenheit ? val * 1.8 + 32 : val);
-  const convertPrecipitation = (val: number) => (useMiles ? val * 0.03937 : val);
-  const convertHumidity = (val: number) => (useDewPoint ? magnusDewPoint(weather!.temp, val) : val);
+  const convertTemp = (val: number) => (useFahrenheit ? val * 1.8 + 32 : val).toFixed(1);
+  const convertPrecipitation = (val: number) => (useMiles ? val * 0.03937 : val).toFixed(1);
+  const convertHumidity = (val: number) => (useDewPoint ? magnusDewPoint(weather!.temp, val) : val).toFixed(1);
 
   let rows: RowItem[] = [
     {
@@ -93,8 +101,9 @@ export default function ShowWeatherScreen() {
       value: convertTemp(weather!.temp),
       details: {
         "單位": useFahrenheit ? "°F" : "°C",
-        "體感溫度": convertTemp(steadmanApparentTemp(weather!.temp, weather!.humidity, weather!.wind)) +
-                   " " + (useFahrenheit ? "°F" : "°C"),
+        "體感溫度":
+          convertTemp(steadmanApparentTemp(weather!.temp, weather!.humidity, weather!.wind)) +
+          " " + (useFahrenheit ? "°F" : "°C"),
         "說明": "體感溫度根據氣溫、濕度與風速計算得出"
       },
     },
@@ -172,6 +181,61 @@ export default function ShowWeatherScreen() {
     setSettingsVisible((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  async function shareAsJson() {
+    if (!weather) return;
+    const fileUri = (FileSystem as any).cacheDirectory + `weather_${lat}_${lng}_${date}.json`;
+    await FileSystem.writeAsStringAsync(fileUri, JSON.stringify(weather, null, 2));
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(fileUri);
+    } else {
+      alert("Sharing not available on this platform.");
+    }
+  }
+
+  async function shareScreenshot() {
+    try {
+      const uri = await captureRef(screenRef, {
+        format: "png",
+        quality: 0.9,
+      });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri);
+      } else {
+        alert("Sharing not available on this platform.");
+      }
+    } catch (err) {
+      console.error("Screenshot failed", err);
+    }
+  }
+
+  function downloadJsonWeb() {
+    if (!weather) return;
+    const blob = new Blob([JSON.stringify(weather, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `weather_${lat}_${lng}_${date}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function downloadScreenshotWeb() {
+    try {
+      const element = document.querySelector("#weather-container") as HTMLElement;
+      if (!element) return;
+
+      const canvas = await html2canvas(element);
+      const dataUrl = canvas.toDataURL("image/png");
+
+      const a = document.createElement("a");
+      a.href = dataUrl;
+      a.download = `weather_${lat}_${lng}_${date}.png`;
+      a.click();
+    } catch (err) {
+      console.error("Web screenshot failed", err);
+    }
+  }
+
   const renderRow = (item: RowItem) => {
     const isExpanded = !!expandedRows[item.key];
     const showSettings = !!settingsVisible[item.key];
@@ -245,10 +309,23 @@ export default function ShowWeatherScreen() {
 
   if (Platform.OS === 'web') {
     return (
-      <SafeAreaView style={{ flex: 1 }}>
-        <div style={{ overflowY: 'auto', height: '100vh', padding: 10 }}>
+      <SafeAreaView style={{ flex: 1 }} ref={screenRef}>
+        <div style={{
+          position: "fixed",
+          top: 10,
+          right: 10,
+          display: "flex",
+          gap: "8px",
+          zIndex: 1000
+        }}>
+          <button onClick={downloadJsonWeb}>獲得JSON</button>
+          <button onClick={downloadScreenshotWeb}>截圖</button>
+        </div>
+
+        <div id="weather-container" style={{ overflowY: 'auto', height: '100vh', padding: 10 }}>
           <Text style={{ fontSize: 18, marginBottom: 10 }}>
-            天氣資訊 ({date}) - 緯度 {lat}, 經度 {lng}
+            天氣資訊 ({date}){"\n"}
+            經度 {lng} 緯度 {lat}
           </Text>
           {rows.map((item) => renderRow(item))}
         </div>
@@ -256,15 +333,29 @@ export default function ShowWeatherScreen() {
     );
   }
   return (
-    <SafeAreaView style={{ flex: 1 }}>
-      <ScrollView
-        style={{ padding: 10 }}
-        contentContainerStyle={{ paddingBottom: 50 }}
-      >
-        <Text style={{ fontSize: 18, marginBottom: 10 }}>
-          天氣資訊 ({date}) - 緯度 {lat}, 經度 {lng}
-        </Text>
-        {rows.map((item) => renderRow(item))}
+    <SafeAreaView style={{ flex: 1 }} ref={screenRef}>
+      <View style={styles.fixedButtons}>
+        <TouchableOpacity
+          style={styles.shareBtn}
+          onPress={Platform.OS === "web" as any ? downloadJsonWeb : shareAsJson}
+        >
+          <Text style={styles.shareText}>獲得JSON</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.shareBtn}
+          onPress={Platform.OS === "web" as any ? downloadScreenshotWeb : shareScreenshot}
+        >
+          <Text style={styles.shareText}>截圖</Text>
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView style={{ padding: 10 }} contentContainerStyle={{ paddingBottom: 50 }}>
+        <View id="weather-container">
+          <Text style={{ fontSize: 18, marginBottom: 10 }}>
+            天氣資訊 ({date}) - 緯度 {lat}, 經度 {lng}
+          </Text>
+          {rows.map((item) => renderRow(item))}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -315,5 +406,24 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 5,
+  },
+  fixedButtons: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    flexDirection: "row",
+    gap: 10,
+    zIndex: 1000,
+  },
+  shareBtn: {
+    backgroundColor: "#007AFF",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+  },
+  shareText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "bold",
   },
 });
