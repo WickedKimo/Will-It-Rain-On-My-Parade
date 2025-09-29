@@ -276,38 +276,6 @@ export default function ShowWeatherScreen() {
     }
   }
 
-  function getTempDistributionChartData(weatherList: WeatherData[], useF: boolean) {
-    const binWidth = useF ? 9 : 5;
-    const temps = weatherList
-      .map(w => useF ? w.temp * 1.8 + 32 : w.temp)
-      .filter(t => !isNaN(t));
-    if (temps.length === 0) {
-      return { labels: [], datasets: [{ data: [] }] };
-    }
-    const min = Math.floor(Math.min(...temps) / binWidth) * binWidth + (useF ? 5 : 0);
-    const max = Math.ceil(Math.max(...temps) / binWidth) * binWidth;
-    const bins: number[] = [];
-    const labels: string[] = [];
-    for (let t = min; t < max; t += binWidth) {
-      bins.push(t);
-      labels.push(`${t}~${t + binWidth}${useF ? "°F" : "°C"}`);
-    }
-    bins.push(max);
-    labels.push(`${max}${useF ? "°F" : "°C"}`);
-
-    const counts = bins.map((bin, i) =>
-      temps.filter(
-        t =>
-          t >= bin &&
-          (i === bins.length - 1 ? t <= bin + binWidth : t < bin + binWidth)
-      ).length
-    );
-    return {
-      labels,
-      datasets: [{ data: counts }],
-    };
-  }
-
   const chartWidth = Math.min(
     Platform.OS === "web"
       ? (window.innerWidth ? window.innerWidth - 80 : 500)
@@ -329,16 +297,92 @@ export default function ShowWeatherScreen() {
       outputRange: [0, 1],
     });
 
-    const showTempChart = item.key === "氣溫" && weatherList.length > 1 && isExpanded;
-    const showTempDistChart = item.key === "氣溫" && weatherList.length > 1 && isExpanded;
-
     const showLineChart = (key: string) =>
-      ["降水量", "風速", "空氣品質", "紫外線", "濕度", "雲層厚度"].includes(key) &&
+      ["氣溫", "降水量", "風速", "空氣品質", "紫外線", "濕度", "雲層厚度"].includes(key) &&
       weatherList.length > 1 &&
       isExpanded;
 
+    const showDistChart = (key: string) =>
+      ["氣溫", "降水量", "風速", "紫外線", "濕度", "雲層厚度"].includes(key) &&
+      weatherList.length > 1 &&
+      isExpanded;
+
+    const getDistChartData = (key: string) => {
+      let values: number[] = [];
+      let binWidth = 1;
+      let unit = "";
+      switch (key) {
+        case "氣溫":
+          values = weatherList.map(w => useFahrenheit ? w.temp * 1.8 + 32 : w.temp).filter(v => !isNaN(v));
+          binWidth = useFahrenheit ? 10 : 5;
+          unit = useFahrenheit ? "°F" : "°C";
+          break;
+        case "降水量":
+          values = weatherList.map(w => useMiles ? w.precipitation * 0.03937 : w.precipitation).filter(v => !isNaN(v));
+          binWidth = useMiles ? 0.1 : 2.5;
+          unit = useMiles ? "in" : "mm";
+          break;
+        case "風速":
+          values = weatherList.map(w => w.wind).filter(v => !isNaN(v));
+          binWidth = 1;
+          unit = "m/s";
+          break;
+        case "紫外線":
+          values = weatherList.map(w => w.uvIndex).filter(v => !isNaN(v));
+          binWidth = 1;
+          unit = "";
+          break;
+        case "濕度":
+          values = weatherList.map(w => useDewPoint ? magnusDewPoint(w.temp, w.humidity) : w.humidity).filter(v => !isNaN(v));
+          binWidth = useDewPoint ? 4 : 5;
+          unit = useDewPoint ? "°C" : "%";
+          break;
+        case "雲層厚度":
+          values = weatherList.map(w => w.cloudCover).filter(v => !isNaN(v));
+          binWidth = 10;
+          unit = "%";
+          break;
+        default:
+          return { labels: [], datasets: [{ data: [] }] };
+      }
+      if (values.length === 0) return { labels: [], datasets: [{ data: [] }] };
+      const min = Math.floor(Math.min(...values) / binWidth) * binWidth;
+      const max = Math.ceil(Math.max(...values) / binWidth) * binWidth;
+      const bins: number[] = [];
+      const labels: string[] = [];
+      for (let t = min; t < max; t += binWidth) {
+        bins.push(t);
+        labels.push(`${t.toFixed(1)}~${(t + binWidth).toFixed(1)}${unit}`);
+      }
+      bins.push(max);
+      labels.push(`${max.toFixed(1)}${unit}` + " +");
+
+      const counts = bins.map((bin, i) =>
+        values.filter(
+          v =>
+            v >= bin &&
+            (i === bins.length - 1 ? v <= bin + binWidth : v < bin + binWidth)
+        ).length
+      );
+      return {
+        labels,
+        datasets: [{ data: counts }],
+      };
+    };
+
     const getChartData = (key: string) => {
       switch (key) {
+        case "氣溫":
+          return {
+            labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
+            datasets: [
+              {
+                data: weatherList.map(w => useFahrenheit ? w.temp * 1.8 + 32 : w.temp),
+                color: () => "#00BFFF",
+                strokeWidth: 2,
+              },
+            ],
+          };
         case "降水量":
           return {
             labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
@@ -462,62 +506,6 @@ export default function ShowWeatherScreen() {
                 {k}: {typeof v === "number" ? v.toFixed(1) : v}
               </Text>
             ))}
-            {showTempChart && (
-              <View style={{ marginTop: 10, marginBottom: 5 }}>
-                <Text style={{ fontSize: 15, marginBottom: 5 }}>歷年同日氣溫</Text>
-                <LineChart
-                  data={{
-                    labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
-                    datasets: [
-                      {
-                        data: weatherList.map(w => useFahrenheit ? w.temp * 1.8 + 32 : w.temp),
-                        color: () => "#007AFF",
-                        strokeWidth: 2,
-                      },
-                    ],
-                  }}
-                  width={chartWidth}
-                  height={Math.max(180, chartWidth * 0.4)}
-                  yAxisSuffix={useFahrenheit ? "°F" : "°C"}
-                  chartConfig={{
-                    backgroundColor: "#fff",
-                    backgroundGradientFrom: "#fff",
-                    backgroundGradientTo: "#fff",
-                    decimalPlaces: 1,
-                    color: (opacity = 1) => `rgba(0,122,255,${opacity})`,
-                    labelColor: (opacity = 1) => `rgba(0,0,0,${opacity})`,
-                    style: { borderRadius: 8 },
-                    propsForDots: { r: "4", strokeWidth: "2", stroke: "#007AFF" },
-                  }}
-                  bezier
-                  style={{ borderRadius: 8 }}
-                />
-              </View>
-            )}
-            {showTempDistChart && (
-              <View style={{ marginTop: 10, marginBottom: 5 }}>
-                <Text style={{ fontSize: 15, marginBottom: 5 }}>氣溫分布圖</Text>
-                <BarChart
-                  data={getTempDistributionChartData(weatherList, useFahrenheit)}
-                  width={chartWidth}
-                  height={Math.max(150, chartWidth * 0.35)}
-                  yAxisLabel=""
-                  yAxisSuffix=""
-                  chartConfig={{
-                    backgroundColor: "#fff",
-                    backgroundGradientFrom: "#fff",
-                    backgroundGradientTo: "#fff",
-                    decimalPlaces: 0,
-                    color: (opacity = 1) => `rgba(0,122,255,${opacity})`,
-                    labelColor: (opacity = 1) => `rgba(0,0,0,${opacity})`,
-                    style: { borderRadius: 8 },
-                  }}
-                  style={{ borderRadius: 8 }}
-                  fromZero
-                  showValuesOnTopOfBars
-                />
-              </View>
-            )}
             {showLineChart(item.key) && (
               <View style={{ marginTop: 10, marginBottom: 5 }}>
                 <Text style={{ fontSize: 15, marginBottom: 5 }}>
@@ -540,6 +528,32 @@ export default function ShowWeatherScreen() {
                   }}
                   bezier
                   style={{ borderRadius: 8 }}
+                />
+              </View>
+            )}
+            {showDistChart(item.key) && (
+              <View style={{ marginTop: 10, marginBottom: 5 }}>
+                <Text style={{ fontSize: 15, marginBottom: 5 }}>
+                  {item.key}分布圖
+                </Text>
+                <BarChart
+                  data={getDistChartData(item.key)}
+                  width={chartWidth}
+                  height={Math.max(150, chartWidth * 0.35)}
+                  yAxisLabel=""
+                  yAxisSuffix=""
+                  chartConfig={{
+                    backgroundColor: "#fff",
+                    backgroundGradientFrom: "#fff",
+                    backgroundGradientTo: "#fff",
+                    decimalPlaces: 0,
+                    color: (opacity = 1) => `rgba(0,122,255,${opacity})`,
+                    labelColor: (opacity = 1) => `rgba(0,0,0,${opacity})`,
+                    style: { borderRadius: 8 },
+                  }}
+                  style={{ borderRadius: 8 }}
+                  fromZero
+                  showValuesOnTopOfBars
                 />
               </View>
             )}
@@ -634,7 +648,7 @@ export default function ShowWeatherScreen() {
               天氣資訊 ({date}) -{"\n"}緯度 {lat}, 經度 {lng}
             </Text>
             {rows.map((item) => renderRow(item))}
-            <View style={{ height: btnHeight + 20 }} />
+            <View style={{ height: settingsVisible ? btnPanelHeight + 20 : btnHeight + 20 }} />
           </View>
         </div>
       ) : (
@@ -647,7 +661,7 @@ export default function ShowWeatherScreen() {
               天氣資訊 ({date}) -{"\n"}緯度 {lat}, 經度 {lng}
             </Text>
             {rows.map((item) => renderRow(item))}
-            <View style={{ height: btnHeight + 20 }} />
+            <View style={{ height: settingsVisible ? btnPanelHeight + 20 : btnHeight + 20 }} />
           </View>
         </ScrollView>
       )}
