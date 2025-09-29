@@ -308,6 +308,13 @@ export default function ShowWeatherScreen() {
     };
   }
 
+  const chartWidth = Math.min(
+    Platform.OS === "web"
+      ? (window.innerWidth ? window.innerWidth - 80 : 500)
+      : Dimensions.get("window").width - 80,
+    600
+  );
+
   const renderRow = (item: RowItem) => {
     const isExpanded = !!expandedRows[item.key];
     if (!animationValues[item.key]) animationValues[item.key] = new Animated.Value(isExpanded ? 1 : 0);
@@ -324,6 +331,114 @@ export default function ShowWeatherScreen() {
 
     const showTempChart = item.key === "氣溫" && weatherList.length > 1 && isExpanded;
     const showTempDistChart = item.key === "氣溫" && weatherList.length > 1 && isExpanded;
+
+    const showLineChart = (key: string) =>
+      ["降水量", "風速", "空氣品質", "紫外線", "濕度", "雲層厚度"].includes(key) &&
+      weatherList.length > 1 &&
+      isExpanded;
+
+    const getChartData = (key: string) => {
+      switch (key) {
+        case "降水量":
+          return {
+            labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
+            datasets: [
+              {
+                data: weatherList.map(w => useMiles ? w.precipitation * 0.03937 : w.precipitation),
+                color: () => "#00BFFF",
+                strokeWidth: 2,
+              },
+            ],
+          };
+        case "風速":
+          return {
+            labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
+            datasets: [
+              {
+                data: weatherList.map(w => w.wind),
+                color: () => "#FF8C00",
+                strokeWidth: 2,
+              },
+            ],
+          };
+        case "空氣品質":
+          return {
+            labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
+            datasets: [
+              {
+                data: weatherList.map(w => {
+                  const v = w.airQuality;
+                  if (typeof v === "number") return v;
+                  switch (v) {
+                    case "優": return 1;
+                    case "良": return 2;
+                    case "普通": return 3;
+                    case "差": return 4;
+                    case "非常差": return 5;
+                    default: return 0;
+                  }
+                }),
+                color: () => "#32CD32",
+                strokeWidth: 2,
+              },
+            ],
+          };
+        case "紫外線":
+          return {
+            labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
+            datasets: [
+              {
+                data: weatherList.map(w => w.uvIndex),
+                color: () => "#9400D3",
+                strokeWidth: 2,
+              },
+            ],
+          };
+        case "濕度":
+          return {
+            labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
+            datasets: [
+              {
+                data: weatherList.map(w => useDewPoint ? magnusDewPoint(w.temp, w.humidity) : w.humidity),
+                color: () => "#1E90FF",
+                strokeWidth: 2,
+              },
+            ],
+          };
+        case "雲層厚度":
+          return {
+            labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
+            datasets: [
+              {
+                data: weatherList.map(w => w.cloudCover),
+                color: () => "#A9A9A9",
+                strokeWidth: 2,
+              },
+            ],
+          };
+        default:
+          return null;
+      }
+    };
+
+    const getYAxisSuffix = (key: string) => {
+      switch (key) {
+        case "降水量":
+          return useMiles ? "in" : "mm";
+        case "風速":
+          return "m/s";
+        case "空氣品質":
+          return "";
+        case "紫外線":
+          return "";
+        case "濕度":
+          return useDewPoint ? "°C" : "%";
+        case "雲層厚度":
+          return "%";
+        default:
+          return "";
+      }
+    };
 
     return (
       <View key={item.key} style={styles.rowContainer}>
@@ -361,8 +476,8 @@ export default function ShowWeatherScreen() {
                       },
                     ],
                   }}
-                  width={Platform.OS === "web" ? 500 : Dimensions.get("window").width - 80}
-                  height={250}
+                  width={chartWidth}
+                  height={Math.max(180, chartWidth * 0.4)}
                   yAxisSuffix={useFahrenheit ? "°F" : "°C"}
                   chartConfig={{
                     backgroundColor: "#fff",
@@ -384,8 +499,8 @@ export default function ShowWeatherScreen() {
                 <Text style={{ fontSize: 15, marginBottom: 5 }}>氣溫分布圖</Text>
                 <BarChart
                   data={getTempDistributionChartData(weatherList, useFahrenheit)}
-                  width={Platform.OS === "web" ? 500 : Dimensions.get("window").width - 80}
-                  height={220}
+                  width={chartWidth}
+                  height={Math.max(150, chartWidth * 0.35)}
                   yAxisLabel=""
                   yAxisSuffix=""
                   chartConfig={{
@@ -400,6 +515,31 @@ export default function ShowWeatherScreen() {
                   style={{ borderRadius: 8 }}
                   fromZero
                   showValuesOnTopOfBars
+                />
+              </View>
+            )}
+            {showLineChart(item.key) && (
+              <View style={{ marginTop: 10, marginBottom: 5 }}>
+                <Text style={{ fontSize: 15, marginBottom: 5 }}>
+                  歷年同日{item.key}變化
+                </Text>
+                <LineChart
+                  data={getChartData(item.key)!}
+                  width={chartWidth}
+                  height={Math.max(150, chartWidth * 0.35)}
+                  yAxisSuffix={getYAxisSuffix(item.key)}
+                  chartConfig={{
+                    backgroundColor: "#fff",
+                    backgroundGradientFrom: "#fff",
+                    backgroundGradientTo: "#fff",
+                    decimalPlaces: 1,
+                    color: (opacity = 1) => `rgba(0,122,255,${opacity})`,
+                    labelColor: (opacity = 1) => `rgba(0,0,0,${opacity})`,
+                    style: { borderRadius: 8 },
+                    propsForDots: { r: "4", strokeWidth: "2", stroke: "#007AFF" },
+                  }}
+                  bezier
+                  style={{ borderRadius: 8 }}
                 />
               </View>
             )}
@@ -494,6 +634,7 @@ export default function ShowWeatherScreen() {
               天氣資訊 ({date}) -{"\n"}緯度 {lat}, 經度 {lng}
             </Text>
             {rows.map((item) => renderRow(item))}
+            <View style={{ height: btnHeight + 20 }} />
           </View>
         </div>
       ) : (
@@ -506,6 +647,7 @@ export default function ShowWeatherScreen() {
               天氣資訊 ({date}) -{"\n"}緯度 {lat}, 經度 {lng}
             </Text>
             {rows.map((item) => renderRow(item))}
+            <View style={{ height: btnHeight + 20 }} />
           </View>
         </ScrollView>
       )}
