@@ -1,10 +1,57 @@
-import React from "react";
-import { ScrollView, View, Text, StyleSheet, TouchableOpacity, Alert } from "react-native";
+import React, { useEffect, useState } from "react";
+import { ScrollView, View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 export default function WeatherScreen() {
-    const { location } = useLocalSearchParams<{ location: string }>();
+    const params = useLocalSearchParams();
     const router = useRouter();
+
+    // 解構參數
+    const {
+        location,
+        latitude,
+        longitude,
+        dateMode,
+        date,
+        startDate,
+        endDate
+    } = params;
+
+    const [isLoading, setIsLoading] = useState(false);
+
+    // 在組件載入時顯示接收到的參數
+    useEffect(() => {
+        console.log('Weather Screen - Received params:', {
+            location,
+            latitude,
+            longitude,
+            dateMode,
+            date,
+            startDate,
+            endDate
+        });
+    }, []);
+
+    // 格式化日期顯示
+    const formatDate = (dateString: string) => {
+        if (!dateString) return '';
+        const dateObj = new Date(dateString);
+        return dateObj.toLocaleDateString('zh-TW', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            weekday: 'short'
+        });
+    };
+
+    // 計算日期範圍的天數
+    const getDaysDifference = (start: string, end: string) => {
+        const startDate = new Date(start);
+        const endDate = new Date(end);
+        const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return diffDays + 1; // 包含開始和結束日
+    };
 
     // 模擬天氣數據（之後可以替換成API）
     const weatherData = {
@@ -19,10 +66,55 @@ export default function WeatherScreen() {
             uvIndex: "7 (High)"
         },
         forecast: [
-            { day: "Today", high: "28°", low: "18°", icon: "☀️" },
-            { day: "Tomorrow", high: "25°", low: "16°", icon: "⛅" },
-            { day: "Wed", high: "22°", low: "14°", icon: "🌧️" },
+            { day: "Today", high: "28°", low: "18°", icon: "☀️", date: new Date().toISOString().split('T')[0] },
+            { day: "Tomorrow", high: "25°", low: "16°", icon: "⛅", date: new Date(Date.now() + 86400000).toISOString().split('T')[0] },
+            { day: "Wed", high: "22°", low: "14°", icon: "🌧️", date: new Date(Date.now() + 172800000).toISOString().split('T')[0] },
+            { day: "Thu", high: "24°", low: "15°", icon: "🌤️", date: new Date(Date.now() + 259200000).toISOString().split('T')[0] },
+            { day: "Fri", high: "26°", low: "17°", icon: "☀️", date: new Date(Date.now() + 345600000).toISOString().split('T')[0] },
+            { day: "Sat", high: "23°", low: "16°", icon: "⛅", date: new Date(Date.now() + 432000000).toISOString().split('T')[0] },
+            { day: "Sun", high: "21°", low: "14°", icon: "🌧️", date: new Date(Date.now() + 518400000).toISOString().split('T')[0] },
         ]
+    };
+
+    // 根據選擇的日期過濾預報數據
+    const getFilteredForecast = () => {
+        if (dateMode === 'single' && date) {
+            // 單一日期：只顯示該日期的天氣
+            return weatherData.forecast.filter(day => day.date === date);
+        } else if (dateMode === 'range' && startDate && endDate) {
+            // 日期區間：顯示範圍內的所有天氣
+            const start = new Date(startDate as string);
+            const end = new Date(endDate as string);
+            return weatherData.forecast.filter(day => {
+                const dayDate = new Date(day.date);
+                return dayDate >= start && dayDate <= end;
+            });
+        }
+        // 沒有選擇日期則顯示未來3天
+        return weatherData.forecast.slice(0, 3);
+    };
+
+    const filteredForecast = getFilteredForecast();
+
+    // 模擬API調用
+    const refreshWeatherData = async () => {
+        setIsLoading(true);
+
+        // 這裡可以調用實際的天氣API
+        console.log('Fetching weather for:', {
+            lat: latitude,
+            lon: longitude,
+            dateMode,
+            date: dateMode === 'single' ? date : null,
+            startDate: dateMode === 'range' ? startDate : null,
+            endDate: dateMode === 'range' ? endDate : null
+        });
+
+        // 模擬延遲
+        setTimeout(() => {
+            setIsLoading(false);
+            Alert.alert("Success", "Weather data refreshed!");
+        }, 1000);
     };
 
     return (
@@ -47,10 +139,39 @@ export default function WeatherScreen() {
             {/* 位置和當前天氣 */}
             <View style={styles.currentWeatherCard}>
                 <Text style={styles.location}>📍 {location}</Text>
+                <Text style={styles.coordinates}>
+                    {latitude && longitude ? `${Number(latitude).toFixed(4)}°, ${Number(longitude).toFixed(4)}°` : ''}
+                </Text>
                 <Text style={styles.currentTemp}>{weatherData.current.temperature}</Text>
                 <Text style={styles.condition}>{weatherData.current.condition}</Text>
                 <Text style={styles.lastUpdated}>Last updated: Just now</Text>
             </View>
+
+            {/* 日期資訊卡片 */}
+            {(date || (startDate && endDate)) && (
+                <View style={styles.dateInfoCard}>
+                    <Text style={styles.dateInfoTitle}>
+                        📅 {dateMode === 'single' ? '查詢日期' : '查詢日期區間'}
+                    </Text>
+                    {dateMode === 'single' && date ? (
+                        <Text style={styles.dateInfoText}>
+                            {formatDate(date as string)}
+                        </Text>
+                    ) : (
+                        <View>
+                            <Text style={styles.dateInfoText}>
+                                從 {formatDate(startDate as string)}
+                            </Text>
+                            <Text style={styles.dateInfoText}>
+                                到 {formatDate(endDate as string)}
+                            </Text>
+                            <Text style={styles.dateInfoDays}>
+                                共 {getDaysDifference(startDate as string, endDate as string)} 天
+                            </Text>
+                        </View>
+                    )}
+                </View>
+            )}
 
             {/* 快速資訊卡片 */}
             <Text style={styles.sectionTitle}>Current Conditions</Text>
@@ -91,36 +212,78 @@ export default function WeatherScreen() {
                 <Text style={styles.value}>{weatherData.current.uvIndex}</Text>
             </View>
 
-            {/* 未來幾天預報 */}
-            <Text style={styles.sectionTitle}>3-Day Forecast</Text>
+            {/* 天氣預報 */}
+            <Text style={styles.sectionTitle}>
+                {filteredForecast.length > 0
+                    ? `${filteredForecast.length}-Day Forecast`
+                    : 'Weather Forecast'}
+            </Text>
 
-            {weatherData.forecast.map((day, index) => (
-                <View key={index} style={styles.forecastCard}>
-                    <Text style={styles.forecastDay}>{day.day}</Text>
-                    <Text style={styles.forecastIcon}>{day.icon}</Text>
-                    <View style={styles.forecastTemp}>
-                        <Text style={styles.forecastHigh}>{day.high}</Text>
-                        <Text style={styles.forecastLow}>{day.low}</Text>
+            {filteredForecast.length > 0 ? (
+                filteredForecast.map((day, index) => (
+                    <View key={index} style={styles.forecastCard}>
+                        <View style={styles.forecastLeft}>
+                            <Text style={styles.forecastDay}>{day.day}</Text>
+                            <Text style={styles.forecastDate}>{formatDate(day.date)}</Text>
+                        </View>
+                        <Text style={styles.forecastIcon}>{day.icon}</Text>
+                        <View style={styles.forecastTemp}>
+                            <Text style={styles.forecastHigh}>{day.high}</Text>
+                            <Text style={styles.forecastLow}>{day.low}</Text>
+                        </View>
                     </View>
+                ))
+            ) : (
+                <View style={styles.noDataCard}>
+                    <Text style={styles.noDataText}>
+                        📭 No forecast data available for selected date(s)
+                    </Text>
                 </View>
-            ))}
+            )}
 
             {/* 功能按鈕 */}
             <View style={styles.actionButtons}>
                 <TouchableOpacity
-                    style={styles.actionButton}
-                    onPress={() => Alert.alert("Refreshing weather data...")}
+                    style={[styles.actionButton, isLoading && styles.actionButtonDisabled]}
+                    onPress={refreshWeatherData}
+                    disabled={isLoading}
                 >
-                    <Text style={styles.actionButtonText}>🔄 Refresh Data</Text>
+                    {isLoading ? (
+                        <ActivityIndicator color="#fff" />
+                    ) : (
+                        <Text style={styles.actionButtonText}>🔄 Refresh Data</Text>
+                    )}
                 </TouchableOpacity>
 
                 <TouchableOpacity
                     style={styles.actionButton}
-                    onPress={() => Alert.alert("Share feature coming soon!")}
+                    onPress={() => {
+                        const shareText = `Weather at ${location}\n${dateMode === 'single' ? formatDate(date as string) : `${formatDate(startDate as string)} - ${formatDate(endDate as string)}`}\nLat: ${latitude}, Lon: ${longitude}`;
+                        Alert.alert("Share Weather", shareText);
+                    }}
                 >
                     <Text style={styles.actionButtonText}>📤 Share Weather</Text>
                 </TouchableOpacity>
             </View>
+
+            {/* Debug 資訊（開發時可用） */}
+            {__DEV__ && (
+                <View style={styles.debugCard}>
+                    <Text style={styles.debugTitle}>🔧 Debug Info</Text>
+                    <Text style={styles.debugText}>Latitude: {latitude}</Text>
+                    <Text style={styles.debugText}>Longitude: {longitude}</Text>
+                    <Text style={styles.debugText}>Date Mode: {dateMode}</Text>
+                    {dateMode === 'single' && (
+                        <Text style={styles.debugText}>Date: {date}</Text>
+                    )}
+                    {dateMode === 'range' && (
+                        <>
+                            <Text style={styles.debugText}>Start: {startDate}</Text>
+                            <Text style={styles.debugText}>End: {endDate}</Text>
+                        </>
+                    )}
+                </View>
+            )}
         </ScrollView>
     );
 }
@@ -173,7 +336,13 @@ const styles = StyleSheet.create({
     location: {
         fontSize: 18,
         color: "#7f8c8d",
+        marginBottom: 4,
+    },
+    coordinates: {
+        fontSize: 12,
+        color: "#95a5a6",
         marginBottom: 8,
+        fontFamily: 'monospace',
     },
     currentTemp: {
         fontSize: 48,
@@ -189,6 +358,34 @@ const styles = StyleSheet.create({
     lastUpdated: {
         fontSize: 12,
         color: "#95a5a6",
+    },
+    dateInfoCard: {
+        backgroundColor: "#667eea",
+        borderRadius: 16,
+        padding: 20,
+        marginBottom: 20,
+        shadowColor: "#000",
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+        elevation: 4,
+    },
+    dateInfoTitle: {
+        fontSize: 16,
+        fontWeight: "600",
+        color: "#fff",
+        marginBottom: 8,
+    },
+    dateInfoText: {
+        fontSize: 18,
+        color: "#fff",
+        fontWeight: "500",
+        marginBottom: 4,
+    },
+    dateInfoDays: {
+        fontSize: 14,
+        color: "rgba(255, 255, 255, 0.8)",
+        marginTop: 8,
+        fontStyle: "italic",
     },
     sectionTitle: {
         fontSize: 18,
@@ -261,14 +458,21 @@ const styles = StyleSheet.create({
         shadowRadius: 4,
         elevation: 2,
     },
+    forecastLeft: {
+        flex: 1,
+    },
     forecastDay: {
         fontSize: 16,
         fontWeight: "500",
         color: "#2c3e50",
-        flex: 1,
+    },
+    forecastDate: {
+        fontSize: 12,
+        color: "#95a5a6",
+        marginTop: 2,
     },
     forecastIcon: {
-        fontSize: 20,
+        fontSize: 24,
         marginHorizontal: 16,
     },
     forecastTemp: {
@@ -285,8 +489,21 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: "#7f8c8d",
     },
+    noDataCard: {
+        backgroundColor: "#fff",
+        borderRadius: 12,
+        padding: 24,
+        alignItems: "center",
+        marginBottom: 12,
+    },
+    noDataText: {
+        fontSize: 16,
+        color: "#7f8c8d",
+        textAlign: "center",
+    },
     actionButtons: {
         marginTop: 20,
+        marginBottom: 30,
         gap: 12,
     },
     actionButton: {
@@ -295,9 +512,30 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         alignItems: "center",
     },
+    actionButtonDisabled: {
+        backgroundColor: "#95a5a6",
+    },
     actionButtonText: {
         color: "#fff",
         fontSize: 16,
         fontWeight: "600",
+    },
+    debugCard: {
+        backgroundColor: "#2c3e50",
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 30,
+    },
+    debugTitle: {
+        fontSize: 14,
+        fontWeight: "600",
+        color: "#ecf0f1",
+        marginBottom: 8,
+    },
+    debugText: {
+        fontSize: 12,
+        color: "#ecf0f1",
+        fontFamily: 'monospace',
+        marginBottom: 4,
     },
 });
