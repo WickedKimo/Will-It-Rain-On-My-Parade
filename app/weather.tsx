@@ -3,18 +3,18 @@ import { AntDesign } from "@expo/vector-icons";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
-	ActivityIndicator,
-	Animated,
-	Dimensions,
-	Platform,
-	Pressable,
-	SafeAreaView,
-	ScrollView,
-	StyleSheet,
-	Switch,
-	Text,
-	TouchableOpacity,
-	View
+    ActivityIndicator,
+    Animated,
+    Dimensions,
+    Platform,
+    Pressable,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Switch,
+    Text,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { BarChart, LineChart } from "react-native-chart-kit";
 
@@ -23,7 +23,6 @@ import weatherData from "./data/example.json";
 import * as FileSystem from "expo-file-system";
 import { useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
-import html2canvas from "html2canvas";
 import React from "react";
 import { captureRef } from "react-native-view-shot";
 
@@ -57,16 +56,16 @@ export default function WeatherScreen() {
 
     const {
         location,
-        lat,
-        lng,
+        latitude,
+        longitude,
         dateMode,
         date,
         startDate,
         endDate
     } = params as {
 		location: string;
-		lat: string;
-		lng: string;
+		latitude: string;
+		longitude: string;
 		dateMode: string;
 		date: string;
 		startDate?: string;
@@ -99,8 +98,8 @@ export default function WeatherScreen() {
         Object.entries(weatherData).forEach(([key, value]) => {
             const [kLat, kLng, kDate] = key.split("_");
             if (
-                kLat === lat &&
-                kLng === lng &&
+                kLat === latitude &&
+                kLng === longitude &&
                 getMonthDay(kDate) === targetMonthDay
             ) {
                 matches.push({ ...(value as WeatherData), date: kDate });
@@ -146,7 +145,7 @@ export default function WeatherScreen() {
 
         setWeather(weatherAvg);
         setLoading(false);
-    }, [lat, lng, date]);
+    }, [latitude, longitude, date]);
 
     if (loading) return <ActivityIndicator style={{ flex: 1 }} />;
 
@@ -248,7 +247,7 @@ export default function WeatherScreen() {
 
     async function shareAsJson() {
         if (!weather) return;
-        const fileUri = (FileSystem as any).cacheDirectory + `weather_${lat}_${lng}_${date}.json`;
+        const fileUri = (FileSystem as any).cacheDirectory + `weather_${latitude}_${longitude}_${date}.json`;
         await FileSystem.writeAsStringAsync(fileUri, JSON.stringify(weather, null, 2));
         if (await Sharing.isAvailableAsync()) {
             await Sharing.shareAsync(fileUri);
@@ -276,26 +275,28 @@ export default function WeatherScreen() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `weather_${lat}_${lng}_${date}.json`;
+        a.download = `weather_${latitude}_${longitude}_${date}.json`;
         a.click();
         URL.revokeObjectURL(url);
     }
 
     async function downloadScreenshotWeb() {
-        try {
-            const element = document.querySelector("#weather-container") as HTMLElement;
-            if (!element) return;
+        alert("請使用分享功能進行截圖");
+        // if (Platform.OS !== "web") return;
+        //     try {
+        //         const element = document.querySelector("#weather-container") as HTMLElement;
+        //         if (!element) return;
 
-            const canvas = await html2canvas(element);
-            const dataUrl = canvas.toDataURL("image/png");
+        //         const canvas = await html2canvas(element);
+        //         const dataUrl = canvas.toDataURL("image/png");
 
-            const a = document.createElement("a");
-            a.href = dataUrl;
-            a.download = `weather_${lat}_${lng}_${date}.png`;
-            a.click();
-        } catch (err) {
-            console.error("Web screenshot failed", err);
-        }
+        //         const a = document.createElement("a");
+        //         a.href = dataUrl;
+        //         a.download = `weather_${latitude}_${longitude}_${date}.png`;
+        //         a.click();
+        //     } catch (err) {
+        //         console.error("Web screenshot failed", err);
+        //     }
     }
 
     const chartWidth = Math.min(
@@ -651,13 +652,13 @@ export default function WeatherScreen() {
             <View style={styles.fixedButtons}>
                 <TouchableOpacity
                     style={styles.shareBtn}
-                    onPress={Platform.OS === "web" as any ? downloadJsonWeb : shareAsJson}
+                    onPress={Platform.OS === "web" ? downloadJsonWeb : shareAsJson}
                 >
                     <Text style={styles.shareText}>獲得JSON</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                     style={styles.shareBtn}
-                    onPress={Platform.OS === "web" as any ? downloadScreenshotWeb : shareScreenshot}
+                    onPress={Platform.OS === "web" ? downloadScreenshotWeb : shareScreenshot}
                 >
                     <Text style={styles.shareText}>截圖</Text>
                 </TouchableOpacity>
@@ -667,7 +668,8 @@ export default function WeatherScreen() {
                 <div style={{ overflowY: "auto", height: "100vh", padding: 10 }}>
                     <View id="weather-container">
                         <Text style={{ fontSize: 18, marginBottom: 10 }}>
-                            天氣資訊 ({date}) -{"\n"}緯度 {lat}, 經度 {lng}
+                            天氣資訊 ({date}) -{"\n"}
+                            緯度 {Number(latitude).toFixed(3)}, 經度 {Number(longitude).toFixed(3)}
                         </Text>
                         {rows.map((item) => renderRow(item))}
                         <View style={{ height: settingsVisible ? btnPanelHeight + 20 : btnHeight + 20 }} />
@@ -680,7 +682,8 @@ export default function WeatherScreen() {
                 >
                     <View id="weather-container">
                         <Text style={{ fontSize: 18, marginBottom: 10 }}>
-                            天氣資訊 ({date}) -{"\n"}緯度 {lat}, 經度 {lng}
+                            天氣資訊 ({date}) -{"\n"}
+                            緯度 {Number(latitude).toFixed(3)}, 經度 {Number(longitude).toFixed(3)}
                         </Text>
                         {rows.map((item) => renderRow(item))}
                         <View style={{ height: settingsVisible ? btnPanelHeight + 20 : btnHeight + 20 }} />
