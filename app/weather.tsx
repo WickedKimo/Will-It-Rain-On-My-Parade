@@ -8,7 +8,6 @@ import {
     Dimensions,
     Platform,
     Pressable,
-    SafeAreaView,
     ScrollView,
     StyleSheet,
     Switch,
@@ -17,6 +16,7 @@ import {
     View
 } from "react-native";
 import { BarChart, LineChart } from "react-native-chart-kit";
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import weatherData from "./data/example.json";
 
@@ -53,6 +53,7 @@ type RowItem = {
 export default function WeatherScreen() {
     const params = useLocalSearchParams();
     const router = useRouter();
+    const insets = useSafeAreaInsets();
 
     const {
         location,
@@ -71,8 +72,6 @@ export default function WeatherScreen() {
 		startDate?: string;
 		endDate?: string
 	};
-
-    // const { lat, lng, date } = params as { lat: string; lng: string; date: string };
 
     const [weather, setWeather] = useState<WeatherData | null>(null);
     const [loading, setLoading] = useState(true);
@@ -648,8 +647,8 @@ export default function WeatherScreen() {
     });
 
     return (
-        <SafeAreaView style={{ flex: 1 }} ref={screenRef}>
-            <View style={styles.fixedButtons}>
+        <View style={{ flex: 1 }}>
+            <View style={{ position: "absolute", top: insets.top, right: 0, left: 0, zIndex: 9999, backgroundColor: "#fff", paddingVertical: 10, paddingHorizontal: 10, flexDirection: "row", justifyContent: "flex-end", gap: 10, elevation: 20 }}>
                 <TouchableOpacity
                     style={styles.shareBtn}
                     onPress={Platform.OS === "web" ? downloadJsonWeb : shareAsJson}
@@ -664,51 +663,53 @@ export default function WeatherScreen() {
                 </TouchableOpacity>
             </View>
 
-            {Platform.OS === "web" ? (
-                <div style={{ overflowY: "auto", height: "100vh", padding: 10 }}>
-                    <View id="weather-container">
-                        <Text style={{ fontSize: 18, marginBottom: 10 }}>
-                            天氣資訊 ({date}) -{"\n"}
-                            緯度 {Number(latitude).toFixed(3)}, 經度 {Number(longitude).toFixed(3)}
-                        </Text>
-                        {rows.map((item) => renderRow(item))}
-                        <View style={{ height: settingsVisible ? btnPanelHeight + 20 : btnHeight + 20 }} />
-                    </View>
-                </div>
-            ) : (
-                <ScrollView
-                    style={{ flex: 1, minHeight: 0, padding: 10 }}
-                    contentContainerStyle={{ paddingBottom: 50 }}
-                >
-                    <View id="weather-container">
-                        <Text style={{ fontSize: 18, marginBottom: 10 }}>
-                            天氣資訊 ({date}) -{"\n"}
-                            緯度 {Number(latitude).toFixed(3)}, 經度 {Number(longitude).toFixed(3)}
-                        </Text>
-                        {rows.map((item) => renderRow(item))}
-                        <View style={{ height: settingsVisible ? btnPanelHeight + 20 : btnHeight + 20 }} />
-                    </View>
-                </ScrollView>
-            )}
+            <SafeAreaView style={{ flex: 1, paddingTop: 60 }} ref={screenRef}>
+                {Platform.OS === "web" ? (
+                    <div style={{ overflowY: "auto", height: "100vh", padding: 10 }}>
+                        <View id="weather-container">
+                            <Text style={{ fontSize: 18, marginBottom: 10 }}>
+                                天氣資訊 ({date}) -{"\n"}
+                                緯度 {Number(latitude).toFixed(3)}, 經度 {Number(longitude).toFixed(3)}
+                            </Text>
+                            {rows.map((item) => renderRow(item))}
+                            <View style={{ height: settingsVisible ? btnPanelHeight + 20 : btnHeight + 20 }} />
+                        </View>
+                    </div>
+                ) : (
+                    <ScrollView
+                        style={{ flex: 1, minHeight: 0, padding: 10 }}
+                        contentContainerStyle={{ paddingBottom: 50 }}
+                    >
+                        <View id="weather-container">
+                            <Text style={{ fontSize: 18, marginBottom: 10 }}>
+                                天氣資訊 ({date}) -{"\n"}
+                                緯度 {Number(latitude).toFixed(3)}, 經度 {Number(longitude).toFixed(3)}
+                            </Text>
+                            {rows.map((item) => renderRow(item))}
+                            <View style={{ height: settingsVisible ? btnPanelHeight + 20 : btnHeight + 20 }} />
+                        </View>
+                    </ScrollView>
+                )}
 
-            <Animated.View
-                style={[
-                    { position: "absolute", left: 0, right: 0, zIndex: 1001, bottom: btnBottom }
-                ]}
-            >
-                <TouchableOpacity
-                    style={styles.toggleSettingsBtn}
-                    onPress={toggleSettingsPanel}
-                    activeOpacity={0.7}
+                <Animated.View
+                    style={[
+                        { position: "absolute", left: 0, right: 0, zIndex: 1001, bottom: btnBottom }
+                    ]}
                 >
-                    <Text style={{ color: "#007AFF", fontWeight: "bold" }}>
-                        {settingsVisible ? "隱藏設定" : "顯示設定"}
-                    </Text>
-                </TouchableOpacity>
-            </Animated.View>
+                    <TouchableOpacity
+                        style={styles.toggleSettingsBtn}
+                        onPress={toggleSettingsPanel}
+                        activeOpacity={0.7}
+                    >
+                        <Text style={{ color: "#007AFF", fontWeight: "bold" }}>
+                            {settingsVisible ? "隱藏設定" : "顯示設定"}
+                        </Text>
+                    </TouchableOpacity>
+                </Animated.View>
 
-            <SettingsPanel />
-        </SafeAreaView>
+                <SettingsPanel />
+            </SafeAreaView>
+        </View>
     );
 }
 
@@ -753,7 +754,9 @@ const styles = StyleSheet.create({
         right: 10,
         flexDirection: "row",
         gap: 10,
-        zIndex: 1000,
+        zIndex: 9999,      // 提高 zIndex
+        elevation: 20,     // Android 也要
+        pointerEvents: "box-none",
     },
     shareBtn: {
         backgroundColor: "#007AFF",
