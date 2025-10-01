@@ -19,13 +19,15 @@ import logging
 
 #%%
 # ---- Config ----
-dataset = "M2T1NXSLV"
+dataset = "M2T1NXFLX"
+# dataset = "M2T1NXSLV"
 dversion = "5.12.4"
-year = 2020
+year = 1981
 bounding_box = (-180, 0, 180, 90)  # (min_lon, min_lat, max_lon, max_lat)
 output_dir = "D:/NasaData/daily"  # one file per day will be written here
 
-VAR_COLS = ["T2M", "QV2M", "U2M", "V2M"]
+VAR_COLS = ["SPEED", "TLML", "QSH", "PRECTOT", "PRECSNO"]
+# VAR_COLS = ["T2M", "QV2M", "U2M", "V2M"]
 COORD_COLS = ["lat", "lon", "time"]
 
 os.makedirs(output_dir, exist_ok=True)
