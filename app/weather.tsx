@@ -1,541 +1,793 @@
-import React, { useEffect, useState } from "react";
-import { ScrollView, View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+// app/weather.tsx
+import { AntDesign } from "@expo/vector-icons";
+import { useLocalSearchParams } from "expo-router";
+import { useEffect, useRef, useState } from "react";
+import {
+	ActivityIndicator,
+	Animated,
+	Dimensions,
+	Platform,
+	Pressable,
+	SafeAreaView,
+	ScrollView,
+	StyleSheet,
+	Switch,
+	Text,
+	TouchableOpacity,
+	View
+} from "react-native";
+import { BarChart, LineChart } from "react-native-chart-kit";
+
+import weatherData from "./data/example.json";
+
+import * as FileSystem from "expo-file-system";
+import { useRouter } from "expo-router";
+import * as Sharing from "expo-sharing";
+import html2canvas from "html2canvas";
+import React from "react";
+import { captureRef } from "react-native-view-shot";
+
+type WeatherData = {
+    temp: number;
+    rainChance: number;
+    snowChance: number;
+    precipitation: number;
+    wind: number;
+    airQuality: string;
+    uvIndex: number;
+    humidity: number;
+    cloudCover: number;
+    date?: string; // Add date for easier reference
+};
+
+function getMonthDay(dateStr: string) {
+    const d = dateStr.replace("_", "-").replace(/\//g, "-").split("-");
+    return d.length === 3 ? `${d[1]}-${d[2]}` : "";
+}
+
+type RowItem = {
+    key: string;
+    value: number | string;
+    details: Record<string, any>;
+};
 
 export default function WeatherScreen() {
     const params = useLocalSearchParams();
     const router = useRouter();
 
-    // 解構參數
     const {
         location,
-        latitude,
-        longitude,
+        lat,
+        lng,
         dateMode,
         date,
         startDate,
         endDate
-    } = params;
+    } = params as {
+		location: string;
+		lat: string;
+		lng: string;
+		dateMode: string;
+		date: string;
+		startDate?: string;
+		endDate?: string
+	};
 
-    const [isLoading, setIsLoading] = useState(false);
+    // const { lat, lng, date } = params as { lat: string; lng: string; date: string };
 
-    // 在組件載入時顯示接收到的參數
+    const [weather, setWeather] = useState<WeatherData | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
+    const animationValues = useRef<Record<string, Animated.Value>>({}).current;
+    const screenRef = useRef<View>(null);
+
+    // User preferences
+    const [useFahrenheit, setUseFahrenheit] = useState(false);
+    const [useDewPoint, setUseDewPoint] = useState(false);
+    const [useMiles, setUseMiles] = useState(false);
+
+    // Bottom settings panel
+    const [settingsVisible, setSettingsVisible] = useState(false);
+    const settingsAnim = useRef(new Animated.Value(0)).current;
+
+    const [weatherList, setWeatherList] = useState<WeatherData[]>([]);
+
     useEffect(() => {
-        console.log('Weather Screen - Received params:', {
-            location,
-            latitude,
-            longitude,
-            dateMode,
-            date,
-            startDate,
-            endDate
+        const targetMonthDay = getMonthDay(date);
+        const matches: WeatherData[] = [];
+
+        Object.entries(weatherData).forEach(([key, value]) => {
+            const [kLat, kLng, kDate] = key.split("_");
+            if (
+                kLat === lat &&
+                kLng === lng &&
+                getMonthDay(kDate) === targetMonthDay
+            ) {
+                matches.push({ ...(value as WeatherData), date: kDate });
+            }
         });
-    }, []);
 
-    // 格式化日期顯示
-    const formatDate = (dateString: string) => {
-        if (!dateString) return '';
-        const dateObj = new Date(dateString);
-        return dateObj.toLocaleDateString('zh-TW', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            weekday: 'short'
-        });
-    };
-
-    // 計算日期範圍的天數
-    const getDaysDifference = (start: string, end: string) => {
-        const startDate = new Date(start);
-        const endDate = new Date(end);
-        const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        return diffDays + 1; // 包含開始和結束日
-    };
-
-    // 模擬天氣數據（之後可以替換成API）
-    const weatherData = {
-        current: {
-            temperature: "28°C",
-            condition: "☀️ Sunny",
-            precipitation: "10%",
-            windSpeed: "12 km/h",
-            humidity: "65%",
-            pressure: "1013 hPa",
-            aqi: "Good (42)",
-            uvIndex: "7 (High)"
-        },
-        forecast: [
-            { day: "Today", high: "28°", low: "18°", icon: "☀️", date: new Date().toISOString().split('T')[0] },
-            { day: "Tomorrow", high: "25°", low: "16°", icon: "⛅", date: new Date(Date.now() + 86400000).toISOString().split('T')[0] },
-            { day: "Wed", high: "22°", low: "14°", icon: "🌧️", date: new Date(Date.now() + 172800000).toISOString().split('T')[0] },
-            { day: "Thu", high: "24°", low: "15°", icon: "🌤️", date: new Date(Date.now() + 259200000).toISOString().split('T')[0] },
-            { day: "Fri", high: "26°", low: "17°", icon: "☀️", date: new Date(Date.now() + 345600000).toISOString().split('T')[0] },
-            { day: "Sat", high: "23°", low: "16°", icon: "⛅", date: new Date(Date.now() + 432000000).toISOString().split('T')[0] },
-            { day: "Sun", high: "21°", low: "14°", icon: "🌧️", date: new Date(Date.now() + 518400000).toISOString().split('T')[0] },
-        ]
-    };
-
-    // 根據選擇的日期過濾預報數據
-    const getFilteredForecast = () => {
-        if (dateMode === 'single' && date) {
-            // 單一日期：只顯示該日期的天氣
-            return weatherData.forecast.filter(day => day.date === date);
-        } else if (dateMode === 'range' && startDate && endDate) {
-            // 日期區間：顯示範圍內的所有天氣
-            const start = new Date(startDate as string);
-            const end = new Date(endDate as string);
-            return weatherData.forecast.filter(day => {
-                const dayDate = new Date(day.date);
-                return dayDate >= start && dayDate <= end;
+        if (matches.length === 0) {
+            matches.push({
+                temp: NaN,
+                rainChance: 0,
+                snowChance: 0,
+                precipitation: 0,
+                wind: 0,
+                airQuality: "Unknown",
+                uvIndex: 0,
+                humidity: 0,
+                cloudCover: 0,
+                date,
             });
         }
-        // 沒有選擇日期則顯示未來3天
-        return weatherData.forecast.slice(0, 3);
-    };
 
-    const filteredForecast = getFilteredForecast();
-
-    // 模擬API調用
-    const refreshWeatherData = async () => {
-        setIsLoading(true);
-
-        // 這裡可以調用實際的天氣API
-        console.log('Fetching weather for:', {
-            lat: latitude,
-            lon: longitude,
-            dateMode,
-            date: dateMode === 'single' ? date : null,
-            startDate: dateMode === 'range' ? startDate : null,
-            endDate: dateMode === 'range' ? endDate : null
+        // Sort by year
+        matches.sort((a, b) => {
+            if (!a.date || !b.date) return 0;
+            return a.date.localeCompare(b.date);
         });
 
-        // 模擬延遲
-        setTimeout(() => {
-            setIsLoading(false);
-            Alert.alert("Success", "Weather data refreshed!");
-        }, 1000);
+        setWeatherList(matches);
+
+        const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+        const weatherAvg: WeatherData = {
+            temp: avg(matches.map(w => w.temp)),
+            rainChance: avg(matches.map(w => w.rainChance)),
+            snowChance: avg(matches.map(w => w.snowChance)),
+            precipitation: avg(matches.map(w => w.precipitation)),
+            wind: avg(matches.map(w => w.wind)),
+            airQuality: matches[0].airQuality,
+            uvIndex: avg(matches.map(w => w.uvIndex)),
+            humidity: avg(matches.map(w => w.humidity)),
+            cloudCover: avg(matches.map(w => w.cloudCover)),
+            date,
+        };
+
+        setWeather(weatherAvg);
+        setLoading(false);
+    }, [lat, lng, date]);
+
+    if (loading) return <ActivityIndicator style={{ flex: 1 }} />;
+
+    function steadmanApparentTemp(tempC: number, humidity: number, wind: number) {
+        const e = (humidity / 100) * 6.105 * Math.exp((17.27 * tempC) / (237.7 + tempC));
+        return 1.04 * tempC + 0.2 * e - 0.65 * wind - 2.7;
+    }
+
+    function magnusDewPoint(tempC: number, humidity: number) {
+        const a = 17.27;
+        const b = 237.7;
+        const alpha = ((a * tempC) / (b + tempC)) + Math.log(humidity / 100);
+        return (b * alpha) / (a - alpha);
+    }
+
+    const convertTemp = (val: number) => (useFahrenheit ? val * 1.8 + 32 : val).toFixed(1);
+    const convertPrecipitation = (val: number) => (useMiles ? val * 0.03937 : val).toFixed(1);
+    const convertHumidity = (val: number) => (useDewPoint ? magnusDewPoint(weather!.temp, val) : val).toFixed(1);
+
+    const rows: RowItem[] = [
+        {
+            key: "氣溫",
+            value: convertTemp(weather!.temp),
+            details: {
+                "單位": useFahrenheit ? "°F" : "°C",
+                "體感溫度": convertTemp(steadmanApparentTemp(weather!.temp, weather!.humidity, weather!.wind)) + " " + (useFahrenheit ? "°F" : "°C"),
+                "說明": "體感溫度根據氣溫、濕度與風速計算得出"
+            },
+        },
+        {
+            key: "降水率",
+            value: weather!.rainChance + weather!.snowChance,
+            details: {
+                "單位": "%",
+                "降雨率": weather!.rainChance + " %",
+                "降雪率": weather!.snowChance + " %",
+                "說明": "降水率為降雨率與降雪率之和"
+            }
+        },
+        {
+            key: "降水量",
+            value: convertPrecipitation(weather!.precipitation),
+            details: {
+                "單位": useMiles ? "in" : "mm"
+            },
+        },
+        {
+            key: "風速",
+            value: weather!.wind,
+            details: {
+                "單位": "m/s",
+            }
+        },
+        {
+            key: "空氣品質",
+            value: weather!.airQuality,
+            details: {
+                "說明": "根據 AQI 分級"
+            }
+        },
+        {
+            key: "紫外線",
+            value: weather!.uvIndex,
+            details: {
+                "範圍": "0-11+"
+            }
+        },
+        {
+            key: "濕度",
+            value: convertHumidity(weather!.humidity),
+            details: {
+                "單位": useDewPoint ? "°C" : "%",
+                "說明": "露點溫度根據濕度與氣溫計算得出"
+            },
+        },
+        {
+            key: "雲層厚度",
+            value: weather!.cloudCover,
+            details: {
+                "單位": "%"
+            }
+        },
+    ];
+
+    const toggleRow = (key: string) => {
+        setExpandedRows((prev) => {
+            const isExpanded = !!prev[key];
+            if (!animationValues[key]) animationValues[key] = new Animated.Value(isExpanded ? 1 : 0);
+
+            Animated.timing(animationValues[key], {
+                toValue: isExpanded ? 0 : 1,
+                duration: 300,
+                useNativeDriver: true,
+            }).start();
+
+            return { ...prev, [key]: !isExpanded };
+        });
     };
 
+    async function shareAsJson() {
+        if (!weather) return;
+        const fileUri = (FileSystem as any).cacheDirectory + `weather_${lat}_${lng}_${date}.json`;
+        await FileSystem.writeAsStringAsync(fileUri, JSON.stringify(weather, null, 2));
+        if (await Sharing.isAvailableAsync()) {
+            await Sharing.shareAsync(fileUri);
+        } else {
+            alert("Sharing not available on this platform.");
+        }
+    }
+
+    async function shareScreenshot() {
+        try {
+            const uri = await captureRef(screenRef, { format: "png", quality: 0.9 });
+            if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(uri);
+            } else {
+                alert("Sharing not available on this platform.");
+            }
+        } catch (err) {
+            console.error("Screenshot failed", err);
+        }
+    }
+
+    function downloadJsonWeb() {
+        if (!weather) return;
+        const blob = new Blob([JSON.stringify(weather, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `weather_${lat}_${lng}_${date}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    async function downloadScreenshotWeb() {
+        try {
+            const element = document.querySelector("#weather-container") as HTMLElement;
+            if (!element) return;
+
+            const canvas = await html2canvas(element);
+            const dataUrl = canvas.toDataURL("image/png");
+
+            const a = document.createElement("a");
+            a.href = dataUrl;
+            a.download = `weather_${lat}_${lng}_${date}.png`;
+            a.click();
+        } catch (err) {
+            console.error("Web screenshot failed", err);
+        }
+    }
+
+    const chartWidth = Math.min(
+        Platform.OS === "web"
+            ? (window.innerWidth ? window.innerWidth - 80 : 500)
+            : Dimensions.get("window").width - 80,
+        600
+    );
+
+    const renderRow = (item: RowItem) => {
+        const isExpanded = !!expandedRows[item.key];
+        if (!animationValues[item.key]) animationValues[item.key] = new Animated.Value(isExpanded ? 1 : 0);
+
+        const rotate = animationValues[item.key].interpolate({
+            inputRange: [0, 1],
+            outputRange: ["0deg", "90deg"],
+        });
+
+        const fadeAnim = animationValues[item.key].interpolate({
+            inputRange: [0, 1],
+            outputRange: [0, 1],
+        });
+
+        const showLineChart = (key: string) =>
+            ["氣溫", "降水量", "風速", "空氣品質", "紫外線", "濕度", "雲層厚度"].includes(key) &&
+            weatherList.length > 1 &&
+            isExpanded;
+
+        const showDistChart = (key: string) =>
+            ["氣溫", "降水量", "風速", "紫外線", "濕度", "雲層厚度"].includes(key) &&
+            weatherList.length > 1 &&
+            isExpanded;
+
+        const getDistChartData = (key: string) => {
+            let values: number[] = [];
+            let binWidth = 1;
+            let unit = "";
+            switch (key) {
+                case "氣溫":
+                    values = weatherList.map(w => useFahrenheit ? w.temp * 1.8 + 32 : w.temp).filter(v => !isNaN(v));
+                    binWidth = useFahrenheit ? 10 : 5;
+                    unit = useFahrenheit ? "°F" : "°C";
+                    break;
+                case "降水量":
+                    values = weatherList.map(w => useMiles ? w.precipitation * 0.03937 : w.precipitation).filter(v => !isNaN(v));
+                    binWidth = useMiles ? 0.1 : 2.5;
+                    unit = useMiles ? "in" : "mm";
+                    break;
+                case "風速":
+                    values = weatherList.map(w => w.wind).filter(v => !isNaN(v));
+                    binWidth = 1;
+                    unit = "m/s";
+                    break;
+                case "紫外線":
+                    values = weatherList.map(w => w.uvIndex).filter(v => !isNaN(v));
+                    binWidth = 1;
+                    unit = "";
+                    break;
+                case "濕度":
+                    values = weatherList.map(w => useDewPoint ? magnusDewPoint(w.temp, w.humidity) : w.humidity).filter(v => !isNaN(v));
+                    binWidth = useDewPoint ? 4 : 5;
+                    unit = useDewPoint ? "°C" : "%";
+                    break;
+                case "雲層厚度":
+                    values = weatherList.map(w => w.cloudCover).filter(v => !isNaN(v));
+                    binWidth = 10;
+                    unit = "%";
+                    break;
+                default:
+                    return { labels: [], datasets: [{ data: [] }] };
+            }
+            if (values.length === 0) return { labels: [], datasets: [{ data: [] }] };
+            const min = Math.floor(Math.min(...values) / binWidth) * binWidth;
+            const max = Math.ceil(Math.max(...values) / binWidth) * binWidth;
+            const bins: number[] = [];
+            const labels: string[] = [];
+            for (let t = min; t < max; t += binWidth) {
+                bins.push(t);
+                labels.push(`${t.toFixed(1)}~${(t + binWidth).toFixed(1)}${unit}`);
+            }
+            bins.push(max);
+            labels.push(`${max.toFixed(1)}${unit}` + " +");
+
+            const counts = bins.map((bin, i) =>
+                values.filter(
+                    v =>
+                        v >= bin &&
+                        (i === bins.length - 1 ? v <= bin + binWidth : v < bin + binWidth)
+                ).length
+            );
+            return {
+                labels,
+                datasets: [{ data: counts }],
+            };
+        };
+
+        const getChartData = (key: string) => {
+            switch (key) {
+                case "氣溫":
+                    return {
+                        labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
+                        datasets: [
+                            {
+                                data: weatherList.map(w => useFahrenheit ? w.temp * 1.8 + 32 : w.temp),
+                                color: () => "#00BFFF",
+                                strokeWidth: 2,
+                            },
+                        ],
+                    };
+                case "降水量":
+                    return {
+                        labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
+                        datasets: [
+                            {
+                                data: weatherList.map(w => useMiles ? w.precipitation * 0.03937 : w.precipitation),
+                                color: () => "#00BFFF",
+                                strokeWidth: 2,
+                            },
+                        ],
+                    };
+                case "風速":
+                    return {
+                        labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
+                        datasets: [
+                            {
+                                data: weatherList.map(w => w.wind),
+                                color: () => "#FF8C00",
+                                strokeWidth: 2,
+                            },
+                        ],
+                    };
+                case "空氣品質":
+                    return {
+                        labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
+                        datasets: [
+                            {
+                                data: weatherList.map(w => {
+                                    const v = w.airQuality;
+                                    if (typeof v === "number") return v;
+                                    switch (v) {
+                                        case "優": return 1;
+                                        case "良": return 2;
+                                        case "普通": return 3;
+                                        case "差": return 4;
+                                        case "非常差": return 5;
+                                        default: return 0;
+                                    }
+                                }),
+                                color: () => "#32CD32",
+                                strokeWidth: 2,
+                            },
+                        ],
+                    };
+                case "紫外線":
+                    return {
+                        labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
+                        datasets: [
+                            {
+                                data: weatherList.map(w => w.uvIndex),
+                                color: () => "#9400D3",
+                                strokeWidth: 2,
+                            },
+                        ],
+                    };
+                case "濕度":
+                    return {
+                        labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
+                        datasets: [
+                            {
+                                data: weatherList.map(w => useDewPoint ? magnusDewPoint(w.temp, w.humidity) : w.humidity),
+                                color: () => "#1E90FF",
+                                strokeWidth: 2,
+                            },
+                        ],
+                    };
+                case "雲層厚度":
+                    return {
+                        labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
+                        datasets: [
+                            {
+                                data: weatherList.map(w => w.cloudCover),
+                                color: () => "#A9A9A9",
+                                strokeWidth: 2,
+                            },
+                        ],
+                    };
+                default:
+                    return null;
+            }
+        };
+
+        const getYAxisSuffix = (key: string) => {
+            switch (key) {
+                case "降水量":
+                    return useMiles ? "in" : "mm";
+                case "風速":
+                    return "m/s";
+                case "空氣品質":
+                    return "";
+                case "紫外線":
+                    return "";
+                case "濕度":
+                    return useDewPoint ? "°C" : "%";
+                case "雲層厚度":
+                    return "%";
+                default:
+                    return "";
+            }
+        };
+
+        return (
+            <View key={item.key} style={styles.rowContainer}>
+                <View style={styles.row}>
+                    <Pressable onPress={() => toggleRow(item.key)} style={styles.iconTouch}>
+                        <Animated.View style={{ transform: [{ rotate }] }}>
+                            <AntDesign name="caret-right" size={20} color="black" />
+                        </Animated.View>
+                    </Pressable>
+
+                    <Text style={styles.rowText}>
+                        {item.key}: {typeof item.value === "number" ? item.value.toFixed(1) : item.value}
+                        {item.details["單位"] ? ` ${item.details["單位"]}` : ""}
+                    </Text>
+                </View>
+
+                {isExpanded && item.details && Object.keys(item.details).length > 0 && (
+                    <Animated.View style={[styles.detailsContainer, { opacity: fadeAnim }]}>
+                        {Object.entries(item.details).map(([k, v]) => (
+                            <Text key={k} style={styles.detailText}>
+                                {k}: {typeof v === "number" ? v.toFixed(1) : v}
+                            </Text>
+                        ))}
+                        {showLineChart(item.key) && (
+                            <View style={{ marginTop: 10, marginBottom: 5 }}>
+                                <Text style={{ fontSize: 15, marginBottom: 5 }}>
+                                    歷年同日{item.key}變化
+                                </Text>
+                                <LineChart
+                                    data={getChartData(item.key)!}
+                                    width={chartWidth}
+                                    height={Math.max(150, chartWidth * 0.35)}
+                                    yAxisSuffix={getYAxisSuffix(item.key)}
+                                    chartConfig={{
+                                        backgroundColor: "#fff",
+                                        backgroundGradientFrom: "#fff",
+                                        backgroundGradientTo: "#fff",
+                                        decimalPlaces: 1,
+                                        color: (opacity = 1) => `rgba(0,122,255,${opacity})`,
+                                        labelColor: (opacity = 1) => `rgba(0,0,0,${opacity})`,
+                                        style: { borderRadius: 8 },
+                                        propsForDots: { r: "4", strokeWidth: "2", stroke: "#007AFF" },
+                                    }}
+                                    bezier
+                                    style={{ borderRadius: 8 }}
+                                />
+                            </View>
+                        )}
+                        {showDistChart(item.key) && (
+                            <View style={{ marginTop: 10, marginBottom: 5 }}>
+                                <Text style={{ fontSize: 15, marginBottom: 5 }}>
+                                    {item.key}分布圖
+                                </Text>
+                                <BarChart
+                                    data={getDistChartData(item.key)}
+                                    width={chartWidth}
+                                    height={Math.max(150, chartWidth * 0.35)}
+                                    yAxisLabel=""
+                                    yAxisSuffix=""
+                                    chartConfig={{
+                                        backgroundColor: "#fff",
+                                        backgroundGradientFrom: "#fff",
+                                        backgroundGradientTo: "#fff",
+                                        decimalPlaces: 0,
+                                        color: (opacity = 1) => `rgba(0,122,255,${opacity})`,
+                                        labelColor: (opacity = 1) => `rgba(0,0,0,${opacity})`,
+                                        style: { borderRadius: 8 },
+                                    }}
+                                    style={{ borderRadius: 8 }}
+                                    fromZero
+                                    showValuesOnTopOfBars
+                                />
+                            </View>
+                        )}
+                    </Animated.View>
+                )}
+            </View>
+        );
+    };
+
+    const toggleSettingsPanel = () => {
+        Animated.timing(settingsAnim, {
+            toValue: settingsVisible ? 0 : 1,
+            duration: 300,
+            useNativeDriver: false,
+        }).start();
+        setSettingsVisible(!settingsVisible);
+    };
+
+    const SettingsPanel = () => {
+        const panelHeight = 150;
+        const translateY = settingsAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [panelHeight, 0],
+        });
+
+        return (
+            <Animated.View
+                style={[
+                    styles.bottomSettings,
+                    {
+                        height: panelHeight,
+                        opacity: settingsAnim,
+                        transform: [{ translateY }],
+                    },
+                ]}
+            >
+                <View style={styles.settingRow}>
+                    <Text>Use Fahrenheit</Text>
+                    <Switch value={useFahrenheit} onValueChange={setUseFahrenheit} />
+                </View>
+                <View style={styles.settingRow}>
+                    <Text>Show Dew Point</Text>
+                    <Switch value={useDewPoint} onValueChange={setUseDewPoint} />
+                </View>
+                <View style={styles.settingRow}>
+                    <Text>Use Inches</Text>
+                    <Switch value={useMiles} onValueChange={setUseMiles} />
+                </View>
+            </Animated.View>
+        );
+    };
+
+    const chartData = {
+        labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
+        datasets: [
+            {
+                data: weatherList.map(w => useFahrenheit ? w.temp * 1.8 + 32 : w.temp),
+                color: () => "#007AFF",
+                strokeWidth: 2,
+            },
+        ],
+    };
+
+    const btnPanelHeight = 150;
+    const btnHeight = 20;
+    const btnBottom = settingsAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [btnHeight, btnPanelHeight],
+    });
+
     return (
-        <ScrollView style={styles.container}>
-            {/* 導航欄 */}
-            <View style={styles.header}>
+        <SafeAreaView style={{ flex: 1 }} ref={screenRef}>
+            <View style={styles.fixedButtons}>
                 <TouchableOpacity
-                    style={styles.backButton}
-                    onPress={() => router.back()}
+                    style={styles.shareBtn}
+                    onPress={Platform.OS === "web" as any ? downloadJsonWeb : shareAsJson}
                 >
-                    <Text style={styles.backButtonText}>← Back</Text>
+                    <Text style={styles.shareText}>獲得JSON</Text>
                 </TouchableOpacity>
-
                 <TouchableOpacity
-                    style={styles.favoriteButton}
-                    onPress={() => Alert.alert("Added to favorites!")}
+                    style={styles.shareBtn}
+                    onPress={Platform.OS === "web" as any ? downloadScreenshotWeb : shareScreenshot}
                 >
-                    <Text style={styles.favoriteButtonText}>⭐</Text>
+                    <Text style={styles.shareText}>截圖</Text>
                 </TouchableOpacity>
             </View>
 
-            {/* 位置和當前天氣 */}
-            <View style={styles.currentWeatherCard}>
-                <Text style={styles.location}>📍 {location}</Text>
-                <Text style={styles.coordinates}>
-                    {latitude && longitude ? `${Number(latitude).toFixed(4)}°, ${Number(longitude).toFixed(4)}°` : ''}
-                </Text>
-                <Text style={styles.currentTemp}>{weatherData.current.temperature}</Text>
-                <Text style={styles.condition}>{weatherData.current.condition}</Text>
-                <Text style={styles.lastUpdated}>Last updated: Just now</Text>
-            </View>
-
-            {/* 日期資訊卡片 */}
-            {(date || (startDate && endDate)) && (
-                <View style={styles.dateInfoCard}>
-                    <Text style={styles.dateInfoTitle}>
-                        📅 {dateMode === 'single' ? '查詢日期' : '查詢日期區間'}
-                    </Text>
-                    {dateMode === 'single' && date ? (
-                        <Text style={styles.dateInfoText}>
-                            {formatDate(date as string)}
+            {Platform.OS === "web" ? (
+                <div style={{ overflowY: "auto", height: "100vh", padding: 10 }}>
+                    <View id="weather-container">
+                        <Text style={{ fontSize: 18, marginBottom: 10 }}>
+                            天氣資訊 ({date}) -{"\n"}緯度 {lat}, 經度 {lng}
                         </Text>
-                    ) : (
-                        <View>
-                            <Text style={styles.dateInfoText}>
-                                從 {formatDate(startDate as string)}
-                            </Text>
-                            <Text style={styles.dateInfoText}>
-                                到 {formatDate(endDate as string)}
-                            </Text>
-                            <Text style={styles.dateInfoDays}>
-                                共 {getDaysDifference(startDate as string, endDate as string)} 天
-                            </Text>
-                        </View>
-                    )}
-                </View>
-            )}
-
-            {/* 快速資訊卡片 */}
-            <Text style={styles.sectionTitle}>Current Conditions</Text>
-
-            <View style={styles.quickInfoRow}>
-                <View style={styles.quickInfoCard}>
-                    <Text style={styles.quickInfoIcon}>🌧️</Text>
-                    <Text style={styles.quickInfoLabel}>Rain</Text>
-                    <Text style={styles.quickInfoValue}>{weatherData.current.precipitation}</Text>
-                </View>
-                <View style={styles.quickInfoCard}>
-                    <Text style={styles.quickInfoIcon}>💨</Text>
-                    <Text style={styles.quickInfoLabel}>Wind</Text>
-                    <Text style={styles.quickInfoValue}>{weatherData.current.windSpeed}</Text>
-                </View>
-                <View style={styles.quickInfoCard}>
-                    <Text style={styles.quickInfoIcon}>💧</Text>
-                    <Text style={styles.quickInfoLabel}>Humidity</Text>
-                    <Text style={styles.quickInfoValue}>{weatherData.current.humidity}</Text>
-                </View>
-            </View>
-
-            {/* 詳細資訊卡片 */}
-            <Text style={styles.sectionTitle}>Detailed Information</Text>
-
-            <View style={styles.card}>
-                <Text style={styles.label}>🌫️ Air Quality Index</Text>
-                <Text style={styles.value}>{weatherData.current.aqi}</Text>
-            </View>
-
-            <View style={styles.card}>
-                <Text style={styles.label}>📉 Atmospheric Pressure</Text>
-                <Text style={styles.value}>{weatherData.current.pressure}</Text>
-            </View>
-
-            <View style={styles.card}>
-                <Text style={styles.label}>☀️ UV Index</Text>
-                <Text style={styles.value}>{weatherData.current.uvIndex}</Text>
-            </View>
-
-            {/* 天氣預報 */}
-            <Text style={styles.sectionTitle}>
-                {filteredForecast.length > 0
-                    ? `${filteredForecast.length}-Day Forecast`
-                    : 'Weather Forecast'}
-            </Text>
-
-            {filteredForecast.length > 0 ? (
-                filteredForecast.map((day, index) => (
-                    <View key={index} style={styles.forecastCard}>
-                        <View style={styles.forecastLeft}>
-                            <Text style={styles.forecastDay}>{day.day}</Text>
-                            <Text style={styles.forecastDate}>{formatDate(day.date)}</Text>
-                        </View>
-                        <Text style={styles.forecastIcon}>{day.icon}</Text>
-                        <View style={styles.forecastTemp}>
-                            <Text style={styles.forecastHigh}>{day.high}</Text>
-                            <Text style={styles.forecastLow}>{day.low}</Text>
-                        </View>
+                        {rows.map((item) => renderRow(item))}
+                        <View style={{ height: settingsVisible ? btnPanelHeight + 20 : btnHeight + 20 }} />
                     </View>
-                ))
+                </div>
             ) : (
-                <View style={styles.noDataCard}>
-                    <Text style={styles.noDataText}>
-                        📭 No forecast data available for selected date(s)
+                <ScrollView
+                    style={{ flex: 1, minHeight: 0, padding: 10 }}
+                    contentContainerStyle={{ paddingBottom: 50 }}
+                >
+                    <View id="weather-container">
+                        <Text style={{ fontSize: 18, marginBottom: 10 }}>
+                            天氣資訊 ({date}) -{"\n"}緯度 {lat}, 經度 {lng}
+                        </Text>
+                        {rows.map((item) => renderRow(item))}
+                        <View style={{ height: settingsVisible ? btnPanelHeight + 20 : btnHeight + 20 }} />
+                    </View>
+                </ScrollView>
+            )}
+
+            <Animated.View
+                style={[
+                    { position: "absolute", left: 0, right: 0, zIndex: 1001, bottom: btnBottom }
+                ]}
+            >
+                <TouchableOpacity
+                    style={styles.toggleSettingsBtn}
+                    onPress={toggleSettingsPanel}
+                    activeOpacity={0.7}
+                >
+                    <Text style={{ color: "#007AFF", fontWeight: "bold" }}>
+                        {settingsVisible ? "隱藏設定" : "顯示設定"}
                     </Text>
-                </View>
-            )}
-
-            {/* 功能按鈕 */}
-            <View style={styles.actionButtons}>
-                <TouchableOpacity
-                    style={[styles.actionButton, isLoading && styles.actionButtonDisabled]}
-                    onPress={refreshWeatherData}
-                    disabled={isLoading}
-                >
-                    {isLoading ? (
-                        <ActivityIndicator color="#fff" />
-                    ) : (
-                        <Text style={styles.actionButtonText}>🔄 Refresh Data</Text>
-                    )}
                 </TouchableOpacity>
+            </Animated.View>
 
-                <TouchableOpacity
-                    style={styles.actionButton}
-                    onPress={() => {
-                        const shareText = `Weather at ${location}\n${dateMode === 'single' ? formatDate(date as string) : `${formatDate(startDate as string)} - ${formatDate(endDate as string)}`}\nLat: ${latitude}, Lon: ${longitude}`;
-                        Alert.alert("Share Weather", shareText);
-                    }}
-                >
-                    <Text style={styles.actionButtonText}>📤 Share Weather</Text>
-                </TouchableOpacity>
-            </View>
-
-            {/* Debug 資訊（開發時可用） */}
-            {__DEV__ && (
-                <View style={styles.debugCard}>
-                    <Text style={styles.debugTitle}>🔧 Debug Info</Text>
-                    <Text style={styles.debugText}>Latitude: {latitude}</Text>
-                    <Text style={styles.debugText}>Longitude: {longitude}</Text>
-                    <Text style={styles.debugText}>Date Mode: {dateMode}</Text>
-                    {dateMode === 'single' && (
-                        <Text style={styles.debugText}>Date: {date}</Text>
-                    )}
-                    {dateMode === 'range' && (
-                        <>
-                            <Text style={styles.debugText}>Start: {startDate}</Text>
-                            <Text style={styles.debugText}>End: {endDate}</Text>
-                        </>
-                    )}
-                </View>
-            )}
-        </ScrollView>
+            <SettingsPanel />
+        </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: "#f5f7fa",
-        padding: 16,
+    rowContainer: {
+        marginBottom: 10,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: "#ddd",
+        overflow: "hidden",
     },
-    header: {
+    row: {
         flexDirection: "row",
-        justifyContent: "space-between",
         alignItems: "center",
-        marginBottom: 20,
-        paddingTop: 10,
+        paddingVertical: 12,
+        paddingHorizontal: 15,
+        backgroundColor: "#f9f9f9",
     },
-    backButton: {
-        backgroundColor: "#3498db",
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 20,
+    rowText: {
+        fontSize: 16,
+        marginLeft: 5,
     },
-    backButtonText: {
-        color: "#fff",
-        fontWeight: "600",
-    },
-    favoriteButton: {
-        backgroundColor: "#f39c12",
-        width: 40,
-        height: 40,
-        borderRadius: 20,
+    iconTouch: {
+        width: 44,
+        height: 44,
         justifyContent: "center",
         alignItems: "center",
     },
-    favoriteButtonText: {
-        fontSize: 18,
+    detailsContainer: {
+        backgroundColor: "#e6f0ff",
+        paddingHorizontal: 20,
+        paddingVertical: 5,
     },
-    currentWeatherCard: {
-        backgroundColor: "#fff",
-        borderRadius: 20,
-        padding: 24,
-        marginBottom: 20,
-        alignItems: "center",
-        shadowColor: "#000",
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 4,
-    },
-    location: {
-        fontSize: 18,
-        color: "#7f8c8d",
-        marginBottom: 4,
-    },
-    coordinates: {
-        fontSize: 12,
-        color: "#95a5a6",
-        marginBottom: 8,
-        fontFamily: 'monospace',
-    },
-    currentTemp: {
-        fontSize: 48,
-        fontWeight: "bold",
-        color: "#2c3e50",
-        marginBottom: 4,
-    },
-    condition: {
-        fontSize: 18,
-        color: "#34495e",
-        marginBottom: 8,
-    },
-    lastUpdated: {
-        fontSize: 12,
-        color: "#95a5a6",
-    },
-    dateInfoCard: {
-        backgroundColor: "#667eea",
-        borderRadius: 16,
-        padding: 20,
-        marginBottom: 20,
-        shadowColor: "#000",
-        shadowOpacity: 0.15,
-        shadowRadius: 8,
-        elevation: 4,
-    },
-    dateInfoTitle: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: "#fff",
-        marginBottom: 8,
-    },
-    dateInfoText: {
-        fontSize: 18,
-        color: "#fff",
-        fontWeight: "500",
-        marginBottom: 4,
-    },
-    dateInfoDays: {
+    detailText: {
         fontSize: 14,
-        color: "rgba(255, 255, 255, 0.8)",
-        marginTop: 8,
-        fontStyle: "italic",
-    },
-    sectionTitle: {
-        fontSize: 18,
-        fontWeight: "600",
-        color: "#2c3e50",
-        marginBottom: 12,
-        marginTop: 8,
-    },
-    quickInfoRow: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        marginBottom: 20,
-    },
-    quickInfoCard: {
-        backgroundColor: "#fff",
-        borderRadius: 12,
-        padding: 12,
-        flex: 1,
-        marginHorizontal: 4,
-        alignItems: "center",
-        shadowColor: "#000",
-        shadowOpacity: 0.05,
-        shadowRadius: 4,
-        elevation: 2,
-    },
-    quickInfoIcon: {
-        fontSize: 20,
-        marginBottom: 4,
-    },
-    quickInfoLabel: {
-        fontSize: 12,
-        color: "#7f8c8d",
+        color: "#333",
         marginBottom: 2,
     },
-    quickInfoValue: {
-        fontSize: 14,
-        fontWeight: "600",
-        color: "#2c3e50",
-    },
-    card: {
-        backgroundColor: "#fff",
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 12,
-        shadowColor: "#000",
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 2,
-    },
-    label: {
-        fontSize: 16,
-        color: "#7f8c8d",
-        marginBottom: 4,
-    },
-    value: {
-        fontSize: 18,
-        fontWeight: "600",
-        color: "#2c3e50",
-    },
-    forecastCard: {
-        backgroundColor: "#fff",
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 8,
+    fixedButtons: {
+        position: "absolute",
+        top: 10,
+        right: 10,
         flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        shadowColor: "#000",
-        shadowOpacity: 0.05,
-        shadowRadius: 4,
-        elevation: 2,
+        gap: 10,
+        zIndex: 1000,
     },
-    forecastLeft: {
-        flex: 1,
+    shareBtn: {
+        backgroundColor: "#007AFF",
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+        borderRadius: 6,
     },
-    forecastDay: {
-        fontSize: 16,
-        fontWeight: "500",
-        color: "#2c3e50",
-    },
-    forecastDate: {
-        fontSize: 12,
-        color: "#95a5a6",
-        marginTop: 2,
-    },
-    forecastIcon: {
-        fontSize: 24,
-        marginHorizontal: 16,
-    },
-    forecastTemp: {
-        flexDirection: "row",
-        alignItems: "center",
-    },
-    forecastHigh: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: "#2c3e50",
-        marginRight: 8,
-    },
-    forecastLow: {
-        fontSize: 14,
-        color: "#7f8c8d",
-    },
-    noDataCard: {
-        backgroundColor: "#fff",
-        borderRadius: 12,
-        padding: 24,
-        alignItems: "center",
-        marginBottom: 12,
-    },
-    noDataText: {
-        fontSize: 16,
-        color: "#7f8c8d",
-        textAlign: "center",
-    },
-    actionButtons: {
-        marginTop: 20,
-        marginBottom: 30,
-        gap: 12,
-    },
-    actionButton: {
-        backgroundColor: "#27ae60",
-        padding: 16,
-        borderRadius: 12,
-        alignItems: "center",
-    },
-    actionButtonDisabled: {
-        backgroundColor: "#95a5a6",
-    },
-    actionButtonText: {
+    shareText: {
         color: "#fff",
-        fontSize: 16,
-        fontWeight: "600",
-    },
-    debugCard: {
-        backgroundColor: "#2c3e50",
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 30,
-    },
-    debugTitle: {
         fontSize: 14,
-        fontWeight: "600",
-        color: "#ecf0f1",
-        marginBottom: 8,
+        fontWeight: "bold",
     },
-    debugText: {
-        fontSize: 12,
-        color: "#ecf0f1",
-        fontFamily: 'monospace',
-        marginBottom: 4,
+    bottomSettings: {
+        position: "absolute",
+        bottom: 0,
+        left: 0,
+        right: 0,
+        backgroundColor: "#fff",
+        paddingHorizontal: 20,
+        borderTopWidth: 1,
+        borderTopColor: "#ddd",
+        overflow: "hidden",
+        zIndex: 1000,
+    },
+    settingRow: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 10,
+        paddingVertical: 5,
+    },
+    toggleSettingsBtn: {
+        alignItems: "center",
+        paddingVertical: 5,
+        backgroundColor: "#f2f2f2",
+        borderTopWidth: 1,
+        borderBottomWidth: 1,
+        borderColor: "#ddd",
     },
 });
