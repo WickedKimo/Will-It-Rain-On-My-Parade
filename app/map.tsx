@@ -1,9 +1,9 @@
-// map.tsx - Enhanced version with date selection and search suggestions
+// map.tsx - Full screen map with floating controls
 import * as Location from 'expo-location';
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
-import { Alert, Button, Keyboard, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Alert, Keyboard, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 
 interface LocationData {
@@ -28,13 +28,12 @@ export default function Map() {
     const [showSuggestions, setShowSuggestions] = useState(false);
     const webviewRef = useRef<any>(null);
     const router = useRouter();
+    const insets = useSafeAreaInsets();
 
-    // Request location permission
     useEffect(() => {
         getCurrentLocation();
     }, []);
 
-    // Search suggestions debounce
     useEffect(() => {
         const timeoutId = setTimeout(() => {
             if (searchText.trim().length > 2) {
@@ -52,7 +51,7 @@ export default function Map() {
         try {
             let { status } = await Location.requestForegroundPermissionsAsync();
             if (status !== 'granted') {
-                Alert.alert('權限被拒絕', '需要位置權限才能使用定位功能');
+                Alert.alert('Permission Denied', 'Location permission is required');
                 setUserLocation({
                     latitude: 25.0330,
                     longitude: 121.5654
@@ -70,7 +69,7 @@ export default function Map() {
             };
             setUserLocation(locationData);
         } catch (error) {
-            console.error('獲取位置失敗:', error);
+            console.error('Location error:', error);
             setUserLocation({
                 latitude: 25.0330,
                 longitude: 121.5654
@@ -78,11 +77,10 @@ export default function Map() {
         }
     };
 
-    // Fetch search suggestions
     const fetchSearchSuggestions = async (query: string) => {
         try {
             const response = await fetch(
-                `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&accept-language=zh-TW,zh,en`
+                `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&accept-language=en,zh-TW,zh`
             );
             const results = await response.json();
             setSearchSuggestions(results);
@@ -92,34 +90,31 @@ export default function Map() {
         }
     };
 
-    // Enhanced map HTML with date selection
     const mapHtml = `
     <!DOCTYPE html>
     <html>
     <head>
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
       <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
       <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
       <style>
-        html,body,#map{margin:0;padding:0;width:100%;height:100%;}
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body, #map { width: 100%; height: 100%; overflow: hidden; }
         
         .location-popup {
           position: fixed;
-          bottom: 1px;
-          left: 20px;
-          right: 20px;
+          bottom: 10px;
+          left: 10px;
+          right: 10px;
           background: rgba(255, 255, 255, 0.98);
           backdrop-filter: blur(20px);
           border-radius: 20px;
           padding: 20px;
           box-shadow: 0 10px 40px rgba(0,0,0,0.3);
           z-index: 1000;
-          transform: translateY(calc(100% + 20px));  /* 完全移出螢幕外 + 額外 20px */
-          pointer-events: none
+          transform: translateY(calc(100% + 20px));
           transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-          max-width: 90vw;
-          margin: 0 auto;
-          max-height: 80vh;
+          max-height: 75vh;
           overflow-y: auto;
         }
         
@@ -272,7 +267,6 @@ export default function Map() {
           margin-top: 6px;
         }
 
-        /* Custom marker styles */
         .custom-marker {
           width: 20px;
           height: 20px;
@@ -298,7 +292,7 @@ export default function Map() {
       <div class="location-popup" id="locationPopup">
         <div class="popup-title">
           <span>📍</span>
-          <span>選擇的位置</span>
+          <span>Selected Location</span>
         </div>
         <div class="popup-coords" id="popupCoords"></div>
         <div class="popup-address" id="popupAddress"></div>
@@ -306,31 +300,31 @@ export default function Map() {
         <div class="date-section">
           <div class="date-section-title">
             <span>📅</span>
-            <span>選擇查詢日期</span>
+            <span>Select Query Date</span>
           </div>
           
           <div class="date-mode-buttons">
             <button class="date-mode-btn active" id="singleDateBtn" onclick="setDateMode('single')">
-              單一日期
+              Single Date
             </button>
             <button class="date-mode-btn" id="rangeDateBtn" onclick="setDateMode('range')">
-              日期區間
+              Date Range
             </button>
           </div>
           
           <div class="date-inputs">
             <div class="date-input-group" id="singleDateGroup">
-              <label class="date-label">選擇日期</label>
+              <label class="date-label">Select Date</label>
               <input type="date" class="date-input" id="singleDate" onchange="validateDates()">
             </div>
             
             <div class="date-input-group" id="startDateGroup" style="display: none;">
-              <label class="date-label">開始日期</label>
+              <label class="date-label">Start Date</label>
               <input type="date" class="date-input" id="startDate" onchange="validateDates()">
             </div>
             
             <div class="date-input-group" id="endDateGroup" style="display: none;">
-              <label class="date-label">結束日期</label>
+              <label class="date-label">End Date</label>
               <input type="date" class="date-input" id="endDate" onchange="validateDates()">
             </div>
             
@@ -339,15 +333,15 @@ export default function Map() {
         </div>
         
         <div class="popup-buttons">
-          <button class="popup-btn btn-clear" onclick="clearSelection()">清除</button>
-          <button class="popup-btn btn-weather" id="weatherBtn" onclick="checkWeather()">查看天氣</button>
+          <button class="popup-btn btn-clear" onclick="clearSelection()">Clear</button>
+          <button class="popup-btn btn-weather" id="weatherBtn" onclick="checkWeather()">Check Weather</button>
         </div>
       </div>
 
       <script>
-        var map = L.map('map').setView([${userLocation?.latitude || 25.0330}, ${userLocation?.longitude || 121.5654}], 13);
+        var map = L.map('map', { zoomControl: false, attributionControl: false }).setView([${userLocation?.latitude || 25.0330}, ${userLocation?.longitude || 121.5654}], 13);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-          attribution:'© OpenStreetMap contributors'
+          attribution:''
         }).addTo(map);
         
         var selectMode = false;
@@ -356,13 +350,11 @@ export default function Map() {
         var selectedLocation = null;
         var dateMode = 'single';
         
-        // Set minimum date to today
         const today = new Date().toISOString().split('T')[0];
         document.getElementById('singleDate').min = today;
         document.getElementById('startDate').min = today;
         document.getElementById('endDate').min = today;
         
-        // Add user location marker
         function addUserLocationMarker(lat, lng) {
           if (userMarker) {
             map.removeLayer(userMarker);
@@ -378,15 +370,23 @@ export default function Map() {
           userMarker = L.marker([lat, lng], { icon: userIcon }).addTo(map);
         }
         
-        // Add initial user marker
         addUserLocationMarker(${userLocation?.latitude || 25.0330}, ${userLocation?.longitude || 121.5654});
         
         window.toggleSelect = function() { 
           selectMode = !selectMode; 
           document.getElementById('map').style.cursor = selectMode ? 'crosshair' : 'grab';
+          
+          var toggleData = {
+            type: 'selectModeChanged',
+            selectMode: selectMode
+          };
+          if(window.ReactNativeWebView){
+            window.ReactNativeWebView.postMessage(JSON.stringify(toggleData));
+          } else {
+            parent.postMessage(JSON.stringify(toggleData), '*');
+          }
         }
         
-        // Date mode selection
         window.setDateMode = function(mode) {
           dateMode = mode;
           
@@ -400,7 +400,6 @@ export default function Map() {
           validateDates();
         };
         
-        // Validate dates
         window.validateDates = function() {
           const errorDiv = document.getElementById('dateError');
           const weatherBtn = document.getElementById('weatherBtn');
@@ -414,12 +413,12 @@ export default function Map() {
             const singleDate = document.getElementById('singleDate').value;
             if (!singleDate) {
               isValid = false;
-              errorMsg = '請選擇日期';
+              errorMsg = 'Please select a date';
             } else {
               const selectedDate = new Date(singleDate);
               if (selectedDate < today) {
                 isValid = false;
-                errorMsg = '不能選擇過去的日期';
+                errorMsg = 'Cannot select past dates';
               }
             }
           } else {
@@ -428,17 +427,17 @@ export default function Map() {
             
             if (!startDate || !endDate) {
               isValid = false;
-              errorMsg = '請選擇開始和結束日期';
+              errorMsg = 'Please select start and end dates';
             } else {
               const start = new Date(startDate);
               const end = new Date(endDate);
               
               if (start < today) {
                 isValid = false;
-                errorMsg = '開始日期不能是過去的日期';
+                errorMsg = 'Start date cannot be in the past';
               } else if (end < start) {
                 isValid = false;
-                errorMsg = '結束日期不能早於開始日期';
+                errorMsg = 'End date cannot be before start date';
               }
             }
           }
@@ -454,7 +453,6 @@ export default function Map() {
           return isValid;
         };
         
-        // Enhanced map click handler
         map.on('click', function(e){
           if(!selectMode) return;
           
@@ -473,13 +471,9 @@ export default function Map() {
           
           marker = L.marker([data.lat, data.lng], { icon: icon }).addTo(map);
           
-          // Store selected location
           selectedLocation = { latitude: data.lat, longitude: data.lng };
           
-          // Show popup with coordinates
           showLocationPopup(data.lat, data.lng);
-          
-          // Reverse geocoding
           reverseGeocode(data.lat, data.lng);
           
           if(window.ReactNativeWebView){
@@ -491,20 +485,18 @@ export default function Map() {
           window.toggleSelect();
         });
         
-        // Show location popup
         function showLocationPopup(lat, lng) {
           document.getElementById('popupCoords').textContent = 
-            \`緯度: \${lat.toFixed(6)} | 經度: \${lng.toFixed(6)}\`;
-          document.getElementById('popupAddress').textContent = '正在獲取地址...';
+            \`Lat: \${lat.toFixed(6)} | Lon: \${lng.toFixed(6)}\`;
+          document.getElementById('popupAddress').textContent = 'Loading address...';
           document.getElementById('locationPopup').classList.add('show');
           validateDates();
         }
         
-        // Reverse geocoding
         async function reverseGeocode(lat, lng) {
           try {
             const response = await fetch(
-              \`https://nominatim.openstreetmap.org/reverse?format=json&lat=\${lat}&lon=\${lng}&addressdetails=1&accept-language=zh-TW,zh,en\`
+              \`https://nominatim.openstreetmap.org/reverse?format=json&lat=\${lat}&lon=\${lng}&addressdetails=1&accept-language=en,zh-TW,zh\`
             );
             const data = await response.json();
             
@@ -513,15 +505,14 @@ export default function Map() {
               document.getElementById('popupAddress').textContent = address;
               selectedLocation.address = address;
             } else {
-              document.getElementById('popupAddress').textContent = '無法獲取地址資訊';
+              document.getElementById('popupAddress').textContent = 'Unable to get address';
             }
           } catch (error) {
             console.error('Reverse geocoding error:', error);
-            document.getElementById('popupAddress').textContent = '地址獲取失敗';
+            document.getElementById('popupAddress').textContent = 'Address lookup failed';
           }
         }
         
-        // Clear selection
         window.clearSelection = function() {
           if (marker) {
             map.removeLayer(marker);
@@ -530,13 +521,11 @@ export default function Map() {
           selectedLocation = null;
           document.getElementById('locationPopup').classList.remove('show');
           
-          // Reset dates
           document.getElementById('singleDate').value = '';
           document.getElementById('startDate').value = '';
           document.getElementById('endDate').value = '';
           document.getElementById('dateError').style.display = 'none';
 
-          // Send message to clear search bar
           var clearData = {
             type: 'clearSearch'
           };
@@ -547,7 +536,6 @@ export default function Map() {
           }
         };
         
-        // Check weather
         window.checkWeather = function() {
           if (!validateDates() || !selectedLocation) return;
           
@@ -573,12 +561,10 @@ export default function Map() {
           }
         };
         
-        // Search location
         window.searchLocation = async function(query) {
           if (!query.trim()) return;
           
           try {
-            // Check coordinate format
             const coordMatch = query.match(/^(-?\\d+\\.?\\d*),\\s*(-?\\d+\\.?\\d*)$/);
             if (coordMatch) {
               const lat = parseFloat(coordMatch[1]);
@@ -593,9 +579,8 @@ export default function Map() {
               }
             }
             
-            // Address search
             const response = await fetch(
-              \`https://nominatim.openstreetmap.org/search?format=json&q=\${encodeURIComponent(query)}&limit=1&accept-language=zh-TW,zh,en\`
+              \`https://nominatim.openstreetmap.org/search?format=json&q=\${encodeURIComponent(query)}&limit=1&accept-language=en,zh-TW,zh\`
             );
             const results = await response.json();
             
@@ -611,7 +596,7 @@ export default function Map() {
             } else {
               var errorData = {
                 type: 'searchError',
-                message: '找不到該地址'
+                message: 'Location not found'
               };
               if(window.ReactNativeWebView){
                 window.ReactNativeWebView.postMessage(JSON.stringify(errorData));
@@ -622,7 +607,7 @@ export default function Map() {
           } catch (error) {
             var errorData = {
               type: 'searchError',
-              message: '搜索時發生錯誤'
+              message: 'Search error occurred'
             };
             if(window.ReactNativeWebView){
               window.ReactNativeWebView.postMessage(JSON.stringify(errorData));
@@ -632,7 +617,6 @@ export default function Map() {
           }
         };
         
-        // Go to user location
         window.goToUserLocation = function(lat, lng) {
           if (lat && lng) {
             map.setView([lat, lng], 15);
@@ -651,10 +635,8 @@ export default function Map() {
             const data = JSON.parse(event.nativeEvent?.data || event.data);
 
             if (data.type === 'checkWeather') {
-                // Prepare location string for display
                 const locationString = data.address || `${data.latitude.toFixed(4)}, ${data.longitude.toFixed(4)}`;
 
-                // Prepare parameters to send to weather page
                 const params: any = {
                     location: locationString,
                     latitude: data.latitude.toString(),
@@ -662,30 +644,26 @@ export default function Map() {
                     dateMode: data.dateMode || 'single'
                 };
 
-                // Add date information based on mode
                 if (data.dateMode === 'single') {
                     params.date = data.date;
-                    console.log('Sending single date:', data.date);
                 } else if (data.dateMode === 'range') {
                     params.startDate = data.startDate;
                     params.endDate = data.endDate;
-                    console.log('Sending date range:', data.startDate, 'to', data.endDate);
                 }
 
-                // Log all parameters being sent
-                console.log('Navigating to weather with params:', params);
-
-                // Navigate to weather page with all parameters
                 router.push({
                     pathname: "/weather" as any,
                     params: params,
                 });
             } else if (data.type === 'searchError') {
-                Alert.alert('搜索錯誤', data.message);
+                Alert.alert('Search Error', data.message);
             } else if (data.type === 'clearSearch') {
-              setSearchText("");
-              setCoords(null);
-              setSelectMode(false);
+                setSearchText("");
+                setShowSuggestions(false);
+                setCoords(null);
+                setSelectMode(false);
+            } else if (data.type === 'selectModeChanged') {
+                setSelectMode(data.selectMode);
             } else if (data.lat && data.lng) {
                 setCoords({ lat: data.lat, lng: data.lng });
                 setSelectMode(false);
@@ -698,6 +676,7 @@ export default function Map() {
     const handleSearch = () => {
         if (searchText.trim()) {
             setShowSuggestions(false);
+            Keyboard.dismiss();
             if (Platform.OS !== "web") {
                 webviewRef.current?.injectJavaScript(`window.searchLocation('${searchText.replace(/'/g, "\\'")}');`);
             } else {
@@ -733,127 +712,145 @@ export default function Map() {
         }
     };
 
-    return (
-        <SafeAreaView style={styles.container} edges={['top']}>
-            <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
-            <View style={styles.container}>
-                {/* Enhanced top controls */}
-                <View style={styles.topControls}>
-                    <View style={styles.searchWrapper}>
-                        <View style={styles.searchContainer}>
-                            <TextInput
-                                style={styles.searchInput}
-                                placeholder="搜尋地點或輸入座標..."
-                                placeholderTextColor="#999"
-                                value={searchText}
-                                onChangeText={setSearchText}
-                                onSubmitEditing={handleSearch}
-                                returnKeyType="search"
-                                autoCapitalize="none"
-                                autoCorrect={false}
-                            />
-                            <TouchableOpacity
-                                style={styles.searchButton}
-                                onPress={handleSearch}
-                                activeOpacity={0.7}
-                            >
-                                <Text style={styles.searchButtonText}>🔍</Text>
-                            </TouchableOpacity>
-                        </View>
+    const toggleSelectMode = () => {
+        if (Platform.OS !== "web") {
+            webviewRef.current?.injectJavaScript(`window.toggleSelect();`);
+        } else {
+            const iframe: any = document.getElementById("mapframe");
+            iframe.contentWindow.toggleSelect?.();
+        }
+    };
 
-                        {showSuggestions && searchSuggestions.length > 0 && (
-                            <View style={styles.suggestionsContainer}>
-                                <ScrollView
-                                    style={styles.suggestionsList}
-                                    keyboardShouldPersistTaps="handled"
-                                >
-                                    {searchSuggestions.map((suggestion) => (
-                                        <TouchableOpacity
-                                            key={suggestion.place_id}
-                                            style={styles.suggestionItem}
-                                            onPress={() => handleSuggestionSelect(suggestion)}
-                                            activeOpacity={0.7}
-                                        >
-                                            <Text style={styles.suggestionIcon}>📍</Text>
-                                            <Text
-                                                style={styles.suggestionText}
-                                                numberOfLines={2}
-                                            >
-                                                {suggestion.display_name}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </ScrollView>
-                            </View>
-                        )}
+    return (
+        <View style={styles.container}>
+            <StatusBar 
+                barStyle="dark-content" 
+                backgroundColor="transparent" 
+                translucent 
+            />
+            
+            {/* Full screen map */}
+            <View style={styles.mapContainer}>
+                {Platform.OS === "web" ? (
+                    <iframe
+                        id="mapframe"
+                        srcDoc={mapHtml}
+                        style={{ width: '100%', height: '100%', border: 'none' }}
+                        onLoad={() => {
+                            window.addEventListener("message", handleMessage);
+                        }}
+                    />
+                ) : (
+                    <WebView
+                        ref={webviewRef}
+                        source={{ html: mapHtml }}
+                        style={styles.map}
+                        javaScriptEnabled={true}
+                        domStorageEnabled={true}
+                        onMessage={handleMessage}
+                        onError={(error) => {
+                            console.error('WebView error:', error);
+                            Alert.alert('Loading Error', 'Map failed to load');
+                        }}
+                        startInLoadingState={true}
+                        allowsInlineMediaPlayback={true}
+                        mediaPlaybackRequiresUserAction={false}
+                        mixedContentMode="compatibility"
+                    />
+                )}
+            </View>
+
+            {/* Floating controls */}
+            <View style={[styles.floatingControls, { top: insets.top + 10 }]}>
+                <View style={styles.searchWrapper}>
+                    <View style={styles.searchContainer}>
+                        <TextInput
+                            style={styles.searchInput}
+                            placeholder="Search location or coordinates..."
+                            placeholderTextColor="#999"
+                            value={searchText}
+                            onChangeText={setSearchText}
+                            onSubmitEditing={handleSearch}
+                            returnKeyType="search"
+                            autoCapitalize="none"
+                            autoCorrect={false}
+                        />
+                        <TouchableOpacity
+                            style={styles.searchButton}
+                            onPress={handleSearch}
+                            activeOpacity={0.7}
+                        >
+                            <Text style={styles.searchButtonText}>🔍</Text>
+                        </TouchableOpacity>
                     </View>
 
-                    <TouchableOpacity
-                        style={styles.locationButton}
-                        onPress={goToUserLocation}
-                        activeOpacity={0.7}
-                    >
-                        <Text style={styles.locationButtonText}>📍</Text>
-                    </TouchableOpacity>
-                </View>
-
-                <Button
-                    title={selectMode ? "取消選擇位置" : "選擇地圖位置"}
-                    onPress={() => {
-                        setSelectMode(!selectMode);
-                        if (Platform.OS !== "web") {
-                            webviewRef.current?.injectJavaScript(`window.toggleSelect();`);
-                        } else {
-                            const iframe: any = document.getElementById("mapframe");
-                            iframe.contentWindow.toggleSelect?.();
-                        }
-                    }}
-                />
-
-                <View style={styles.mapContainer}>
-                    {Platform.OS === "web" ? (
-                        <iframe
-                            id="mapframe"
-                            srcDoc={mapHtml}
-                            style={styles.map}
-                            onLoad={() => {
-                                window.addEventListener("message", handleMessage);
-                            }}
-                        />
-                    ) : (
-                        <WebView
-                            ref={webviewRef}
-                            source={{ html: mapHtml }}
-                            style={styles.map}
-                            javaScriptEnabled={true}
-                            domStorageEnabled={true}
-                            onMessage={handleMessage}
-                            onError={(error) => {
-                                console.error('WebView error:', error);
-                                Alert.alert('載入錯誤', '地圖載入失敗,請檢查網路連線');
-                            }}
-                            startInLoadingState={true}
-                            allowsInlineMediaPlayback={true}
-                            mediaPlaybackRequiresUserAction={false}
-                            mixedContentMode="compatibility"
-                        />
+                    {showSuggestions && searchSuggestions.length > 0 && (
+                        <View style={styles.suggestionsContainer}>
+                            <ScrollView
+                                style={styles.suggestionsList}
+                                keyboardShouldPersistTaps="handled"
+                            >
+                                {searchSuggestions.map((suggestion) => (
+                                    <TouchableOpacity
+                                        key={suggestion.place_id}
+                                        style={styles.suggestionItem}
+                                        onPress={() => handleSuggestionSelect(suggestion)}
+                                        activeOpacity={0.7}
+                                    >
+                                        <Text style={styles.suggestionIcon}>📍</Text>
+                                        <Text
+                                            style={styles.suggestionText}
+                                            numberOfLines={2}
+                                        >
+                                            {suggestion.display_name}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+                        </View>
                     )}
                 </View>
+
+                <TouchableOpacity
+                    style={styles.locationButton}
+                    onPress={goToUserLocation}
+                    activeOpacity={0.7}
+                >
+                    <Text style={styles.locationButtonText}>📍</Text>
+                </TouchableOpacity>
             </View>
-        </SafeAreaView>
+
+            {/* Floating select button */}
+            <TouchableOpacity
+                style={[styles.selectButton, { bottom: insets.bottom + 20 }]}
+                onPress={toggleSelectMode}
+                activeOpacity={0.8}
+            >
+                <Text style={styles.selectButtonText}>
+                    {selectMode ? "✕" : "📌"}
+                </Text>
+            </TouchableOpacity>
+        </View>
     );
 }
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        padding: 10,
         backgroundColor: '#f5f5f5'
     },
-    topControls: {
+    mapContainer: {
+        ...StyleSheet.absoluteFillObject,
+    },
+    map: {
+        flex: 1,
+    },
+    floatingControls: {
+        position: 'absolute',
+        left: 10,
+        right: 10,
         flexDirection: 'row',
         alignItems: 'flex-start',
-        marginBottom: 10,
         gap: 10,
         zIndex: 1000,
     },
@@ -869,9 +866,9 @@ const styles = StyleSheet.create({
         paddingHorizontal: 4,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 5,
     },
     searchInput: {
         flex: 1,
@@ -901,7 +898,7 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.15,
+        shadowOpacity: 0.2,
         shadowRadius: 8,
         elevation: 5,
         maxHeight: 250,
@@ -936,26 +933,31 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 5,
     },
     locationButtonText: {
         fontSize: 16,
     },
-    mapContainer: {
-        flex: 1,
-        marginTop: 10,
-        borderRadius: 12,
-        overflow: 'hidden',
+    selectButton: {
+        position: 'absolute',
+        right: 20,
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: '#667eea',
+        justifyContent: 'center',
+        alignItems: 'center',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
+        shadowOpacity: 0.3,
         shadowRadius: 8,
-        elevation: 5,
+        elevation: 8,
+        zIndex: 999,
     },
-    map: {
-        width: "100%",
-        height: "100%"
+    selectButtonText: {
+        fontSize: 24,
+        color: 'white',
     },
 });
