@@ -1,10 +1,10 @@
 // map.tsx - Enhanced version with date selection and search suggestions
-import React, { useRef, useState, useEffect } from "react";
-import { Button, Platform, StyleSheet, Text, View, TextInput, TouchableOpacity, Alert, ScrollView, StatusBar } from "react-native";
+import * as Location from 'expo-location';
+import { useRouter } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
+import { Alert, Button, Keyboard, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
-import { useRouter } from "expo-router";
-import * as Location from 'expo-location';
 
 interface LocationData {
     latitude: number;
@@ -105,7 +105,7 @@ export default function Map() {
         
         .location-popup {
           position: fixed;
-          bottom: 20px;
+          bottom: 1px;
           left: 20px;
           right: 20px;
           background: rgba(255, 255, 255, 0.98);
@@ -119,7 +119,7 @@ export default function Map() {
           transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
           max-width: 90vw;
           margin: 0 auto;
-          max-height: 70vh;
+          max-height: 80vh;
           overflow-y: auto;
         }
         
@@ -535,6 +535,16 @@ export default function Map() {
           document.getElementById('startDate').value = '';
           document.getElementById('endDate').value = '';
           document.getElementById('dateError').style.display = 'none';
+
+          // Send message to clear search bar
+          var clearData = {
+            type: 'clearSearch'
+          };
+          if(window.ReactNativeWebView){
+            window.ReactNativeWebView.postMessage(JSON.stringify(clearData));
+          } else {
+            parent.postMessage(JSON.stringify(clearData), '*');
+          }
         };
         
         // Check weather
@@ -672,6 +682,10 @@ export default function Map() {
                 });
             } else if (data.type === 'searchError') {
                 Alert.alert('搜索錯誤', data.message);
+            } else if (data.type === 'clearSearch') {
+              setSearchText("");
+              setCoords(null);
+              setSelectMode(false);
             } else if (data.lat && data.lng) {
                 setCoords({ lat: data.lat, lng: data.lng });
                 setSelectMode(false);
@@ -696,6 +710,7 @@ export default function Map() {
     const handleSuggestionSelect = (suggestion: SearchSuggestion) => {
         setSearchText(suggestion.display_name);
         setShowSuggestions(false);
+        Keyboard.dismiss();
 
         if (Platform.OS !== "web") {
             webviewRef.current?.injectJavaScript(`window.searchLocation('${suggestion.display_name.replace(/'/g, "\\'")}');`);
