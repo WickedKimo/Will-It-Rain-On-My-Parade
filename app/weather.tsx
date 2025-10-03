@@ -251,65 +251,65 @@ export default function WeatherScreen() {
 
 	const rows: RowItem[] = [
 		{
-			key: "氣溫",
+			key: "Temperature",
 			value: convertTemp(weather!.temp),
 			details: {
-				"單位": useFahrenheit ? "°F" : "°C",
-				"體感溫度": convertTemp(steadmanApparentTemp(weather!.temp, weather!.humidity, weather!.wind)) + " " + (useFahrenheit ? "°F" : "°C"),
-				"說明": "體感溫度根據氣溫、濕度與風速計算得出"
+				"Unit": useFahrenheit ? "°F" : "°C",
+				"Apparent Temperature": convertTemp(steadmanApparentTemp(weather!.temp, weather!.humidity, weather!.wind)) + " " + (useFahrenheit ? "°F" : "°C"),
+				"Description": "Apparent temperature is calculated based on temperature, humidity, and wind speed"
 			},
 		},
 		{
-			key: "降水率",
+			key: "Precipitation Probability",
 			value: weather!.rainChance + weather!.snowChance,
 			details: {
-				"單位": "%",
-				"降雨率": weather!.rainChance + " %",
-				"降雪率": weather!.snowChance + " %",
-				"說明": "降水率為降雨率與降雪率之和"
+				"Unit": "%",
+				"Rain Probability": weather!.rainChance + " %",
+				"Snow Probability": weather!.snowChance + " %",
+				"Description": "Precipitation probability is the sum of rain and snow chances"
 			}
 		},
 		{
-			key: "降水量",
+			key: "Precipitation Amount",
 			value: convertPrecipitation(weather!.precipitation),
 			details: {
-				"單位": useMiles ? "in" : "mm"
+				"Unit": useMiles ? "in" : "mm"
 			},
 		},
 		{
-			key: "風速",
+			key: "Wind Speed",
 			value: weather!.wind,
 			details: {
-				"單位": "m/s",
+				"Unit": "m/s",
 			}
 		},
 		// {
-		// 	key: "空氣品質",
+		// 	key: "Air Quality",
 		// 	value: weather!.airQuality,
 		// 	details: {
-		// 		"說明": "根據 AQI 分級"
+		// 		"Description": "Based on AQI classification"
 		// 	}
 		// },
 		{
-			key: "紫外線",
+			key: "UV Index",
 			value: weather!.uvIndex,
 			details: {
-				"範圍": "0-11+"
+				"Range": "0-11+"
 			}
 		},
 		{
-			key: "濕度",
+			key: "Humidity",
 			value: convertHumidity(weather!.humidity),
 			details: {
-				"單位": useDewPoint ? "°C" : "%",
-				"說明": "露點溫度根據濕度與氣溫計算得出"
+				"Unit": useDewPoint ? "°C" : "%",
+				"Description": "Dew point temperature is calculated from humidity and air temperature"
 			},
 		},
 		{
-			key: "雲層厚度",
+			key: "Cloud Cover",
 			value: weather!.cloudCover,
 			details: {
-				"單位": "%"
+				"Unit": "%"
 			}
 		},
 	];
@@ -365,7 +365,7 @@ export default function WeatherScreen() {
 	}
 
 	async function downloadScreenshotWeb() {
-		alert("請使用分享功能進行截圖");
+		alert("Please use the web browser's built-in screenshot function (e.g. Print to PDF) to capture the content.");
 		// if (Platform.OS !== "web") return;
 		//     try {
 		//         const element = document.querySelector("#weather-container") as HTMLElement;
@@ -405,12 +405,12 @@ export default function WeatherScreen() {
 		});
 
 		const showLineChart = (key: string) =>
-			["氣溫", "降水量", "風速", "紫外線", "濕度", "雲層厚度"].includes(key) &&
+			["Temperature", "Precipitation Amount", "Wind Speed", "UV Index", "Humidity", "Cloud Cover"].includes(key) &&
 			weatherList.length > 1 &&
 			isExpanded;
 
 		const showDistChart = (key: string) =>
-			["氣溫", "降水量", "風速", "紫外線", "濕度", "雲層厚度"].includes(key) &&
+			["Temperature", "Precipitation Amount", "Wind Speed", "UV Index", "Humidity", "Cloud Cover"].includes(key) &&
 			weatherList.length > 1 &&
 			isExpanded;
 
@@ -419,32 +419,32 @@ export default function WeatherScreen() {
 			let binWidth = 1;
 			let unit = "";
 			switch (key) {
-				case "氣溫":
+				case "Temperature":
 					values = weatherList.map(w => useFahrenheit ? w.temp * 1.8 + 32 : w.temp).filter(v => !isNaN(v));
 					binWidth = useFahrenheit ? 10 : 5;
 					unit = useFahrenheit ? "°F" : "°C";
 					break;
-				case "降水量":
+				case "Precipitation Amount":
 					values = weatherList.map(w => useMiles ? w.precipitation * 0.03937 : w.precipitation).filter(v => !isNaN(v));
 					binWidth = useMiles ? 0.1 : 2.5;
 					unit = useMiles ? "in" : "mm";
 					break;
-				case "風速":
+				case "Wind Speed":
 					values = weatherList.map(w => w.wind).filter(v => !isNaN(v));
 					binWidth = 1;
 					unit = "m/s";
 					break;
-				case "紫外線":
+				case "UV Index":
 					values = weatherList.map(w => w.uvIndex).filter(v => !isNaN(v));
 					binWidth = 1;
 					unit = "";
 					break;
-				case "濕度":
+				case "Humidity":
 					values = weatherList.map(w => useDewPoint ? magnusDewPoint(w.temp, w.humidity) : w.humidity).filter(v => !isNaN(v));
 					binWidth = useDewPoint ? 4 : 5;
 					unit = useDewPoint ? "°C" : "%";
 					break;
-				case "雲層厚度":
+				case "Cloud Cover":
 					values = weatherList.map(w => w.cloudCover).filter(v => !isNaN(v));
 					binWidth = 10;
 					unit = "%";
@@ -479,7 +479,7 @@ export default function WeatherScreen() {
 
 		const getChartData = (key: string) => {
 			switch (key) {
-				case "氣溫":
+				case "Temperature":
 					return {
 						labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
 						datasets: [
@@ -490,7 +490,7 @@ export default function WeatherScreen() {
 							},
 						],
 					};
-				case "降水量":
+				case "Precipitation Amount":
 					return {
 						labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
 						datasets: [
@@ -501,7 +501,7 @@ export default function WeatherScreen() {
 							},
 						],
 					};
-				case "風速":
+				case "Wind Speed":
 					return {
 						labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
 						datasets: [
@@ -512,7 +512,7 @@ export default function WeatherScreen() {
 							},
 						],
 					};
-				// case "空氣品質":
+				// case "Air Quality":
 				// 	return {
 				// 		labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
 				// 		datasets: [
@@ -534,7 +534,7 @@ export default function WeatherScreen() {
 				// 			},
 				// 		],
 				// 	};
-				case "紫外線":
+				case "UV Index":
 					return {
 						labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
 						datasets: [
@@ -545,7 +545,7 @@ export default function WeatherScreen() {
 							},
 						],
 					};
-				case "濕度":
+				case "Humidity":
 					return {
 						labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
 						datasets: [
@@ -556,7 +556,7 @@ export default function WeatherScreen() {
 							},
 						],
 					};
-				case "雲層厚度":
+				case "Cloud Cover":
 					return {
 						labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
 						datasets: [
@@ -574,17 +574,17 @@ export default function WeatherScreen() {
 
 		const getYAxisSuffix = (key: string) => {
 			switch (key) {
-				case "降水量":
+				case "Precipitation Amount":
 					return useMiles ? "in" : "mm";
-				case "風速":
+				case "Wind Speed":
 					return "m/s";
-				// case "空氣品質":
+				// case "Air Quality":
 				// 	return "";
-				case "紫外線":
+				case "UV Index":
 					return "";
-				case "濕度":
+				case "Humidity":
 					return useDewPoint ? "°C" : "%";
-				case "雲層厚度":
+				case "Cloud Cover":
 					return "%";
 				default:
 					return "";
@@ -616,7 +616,7 @@ export default function WeatherScreen() {
 						{showLineChart(item.key) && (
 							<View style={{ marginTop: 10, marginBottom: 5 }}>
 								<Text style={{ fontSize: 15, marginBottom: 5 }}>
-									歷年同日{item.key}變化
+									Yearly same-day {item.key} variation
 								</Text>
 								<LineChart
 									data={getChartData(item.key)!}
@@ -641,7 +641,7 @@ export default function WeatherScreen() {
 						{showDistChart(item.key) && (
 							<View style={{ marginTop: 10, marginBottom: 5 }}>
 								<Text style={{ fontSize: 15, marginBottom: 5 }}>
-									{item.key}分布圖
+									{item.key} Distribution Chart
 								</Text>
 								<BarChart
 									data={getDistChartData(item.key)}
@@ -737,13 +737,13 @@ export default function WeatherScreen() {
 					style={styles.shareBtn}
 					onPress={Platform.OS === "web" ? downloadJsonWeb : shareAsJson}
 				>
-					<Text style={styles.shareText}>獲得JSON</Text>
+					<Text style={styles.shareText}>Get JSON</Text>
 				</TouchableOpacity>
 				<TouchableOpacity
 					style={styles.shareBtn}
 					onPress={Platform.OS === "web" ? downloadScreenshotWeb : shareScreenshot}
 				>
-					<Text style={styles.shareText}>截圖</Text>
+					<Text style={styles.shareText}>Screenshot</Text>
 				</TouchableOpacity>
 			</View>
 
@@ -752,8 +752,8 @@ export default function WeatherScreen() {
 					<div style={{ overflowY: "auto", height: "100vh", padding: 10 }}>
 						<View id="weather-container">
 							<Text style={{ fontSize: 18, marginBottom: 10 }}>
-								天氣資訊 ({targetDate}) -{"\n"}
-								緯度 {Number(targetLatitude).toFixed(3)}, 經度 {Number(targetLongitude).toFixed(3)}
+								Weather Information ({targetDate}) -{"\n"}
+								Latitude {Number(targetLatitude).toFixed(3)}, Longitude {Number(targetLongitude).toFixed(3)}
 							</Text>
 							{rows.map((item) => renderRow(item))}
 							<View style={{ height: settingsVisible ? btnPanelHeight + 20 : btnHeight + 20 }} />
@@ -766,8 +766,8 @@ export default function WeatherScreen() {
 					>
 						<View id="weather-container">
 							<Text style={{ fontSize: 18, marginBottom: 10 }}>
-								天氣資訊 ({targetDate}) -{"\n"}
-								緯度 {Number(targetLatitude).toFixed(3)}, 經度 {Number(targetLongitude).toFixed(3)}
+								Weather Information ({targetDate}) -{"\n"}
+								Latitude {Number(targetLatitude).toFixed(3)}, Longitude {Number(targetLongitude).toFixed(3)}
 							</Text>
 							{rows.map((item) => renderRow(item))}
 							<View style={{ height: settingsVisible ? btnPanelHeight + 20 : btnHeight + 20 }} />
@@ -786,7 +786,7 @@ export default function WeatherScreen() {
 						activeOpacity={0.7}
 					>
 						<Text style={{ color: "#007AFF", fontWeight: "bold" }}>
-							{settingsVisible ? "隱藏設定" : "顯示設定"}
+							{settingsVisible ? "Hide Settings" : "Show Settings"}
 						</Text>
 					</TouchableOpacity>
 				</Animated.View>
@@ -838,8 +838,8 @@ const styles = StyleSheet.create({
 		right: 10,
 		flexDirection: "row",
 		gap: 10,
-		zIndex: 9999,      // 提高 zIndex
-		elevation: 20,     // Android 也要
+		zIndex: 9999,
+		elevation: 20,
 		pointerEvents: "box-none",
 	},
 	shareBtn: {
