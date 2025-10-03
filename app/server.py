@@ -64,14 +64,15 @@ def get_weather():
         start_date = date
         end_date = date
 
-    if latitude is None or longitude is None:
-        return jsonify({"error": "Missing latitude or longitude"}), 400
+    ## TODO: Replace with real data fetching logic
+    # if latitude is None or longitude is None:
+    #     return jsonify({"error": "Missing latitude or longitude"}), 400
 
-    weather = generate_weather_data(latitude, longitude, start_date, end_date)
+    # weather = generate_weather_data(latitude, longitude, start_date, end_date)
 
-    filename = f"{latitude}_{longitude}.json"
-    with open(filename, "w") as f:
-        json.dump(weather, f, indent=2)
+    # filename = f"{latitude}_{longitude}.json"
+    # with open(filename, "w") as f:
+    #     json.dump(weather, f, indent=2)
 
     return jsonify(weather)
 
