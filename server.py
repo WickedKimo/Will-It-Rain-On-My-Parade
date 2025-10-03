@@ -1,17 +1,43 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
+import json
 
 app = Flask(__name__)
+CORS(app)  # Allow cross-origin requests
 
-# Example Python function
 def add_numbers(a, b):
     return a + b
 
-# API endpoint
 @app.route("/add", methods=["POST"])
 def add():
     data = request.json
-    result = add_numbers(data["a"], data["b"])
-    return jsonify({"result": result})
+
+    # Extract values from frontend
+    a = data.get("a")
+    b = data.get("b")
+    latitude = data.get("latitude")
+    longitude = data.get("longitude")
+
+    result = add_numbers(a, b)
+
+    # Build filename using latitude_longitude
+    if latitude is not None and longitude is not None:
+        filename = f"{latitude}_{longitude}.json"
+    else:
+        filename = "result.json"
+
+    # Write JSON file
+    output_data = {
+        "a": a,
+        "b": b,
+        "result": result,
+        "latitude": latitude,
+        "longitude": longitude
+    }
+    with open(filename, "w") as f:
+        json.dump(output_data, f, indent=2)
+
+    return jsonify({"result": result, "filename": filename})
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    app.run(host="0.0.0.0", port=5000, debug=True)

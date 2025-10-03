@@ -128,6 +128,25 @@ export default function WeatherScreen() {
 	const targetLatitude = Number(latitude).toFixed(3);
 	const targetLongitude = Number(longitude).toFixed(3);
 
+	useEffect(() => {
+		const callPython = async () => {
+			const response = await fetch("http://localhost:5000/add", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				a: 5,
+				b: 10,
+				latitude: targetLatitude,
+				longitude: targetLongitude
+			}),
+			});
+			const data = await response.json();
+			console.log("Saved file:", data.filename);
+		};
+
+		callPython();
+	}, []);
+
 	const [weather, setWeather] = useState<WeatherData | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
@@ -144,7 +163,6 @@ export default function WeatherScreen() {
 	const settingsAnim = useRef(new Animated.Value(0)).current;
 
 	const [weatherList, setWeatherList] = useState<WeatherData[]>([]);
-
 
 	useEffect(() => {
 		if (!targetDate) {
