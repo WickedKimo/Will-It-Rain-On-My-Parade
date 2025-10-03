@@ -1,4 +1,6 @@
 #%%
+# ---- Imports ----
+
 import xarray as xr
 import os
 import earthaccess
@@ -19,20 +21,30 @@ import logging
 
 #%%
 # ---- Config ----
+
+# dataset = "M2T1NXRAD"
 dataset = "M2T1NXFLX"
 # dataset = "M2T1NXSLV"
 dversion = "5.12.4"
-year = 1981
+year = 2020
+start_date = "01-01"
+end_date = "01-01"
 bounding_box = (-180, 0, 180, 90)  # (min_lon, min_lat, max_lon, max_lat)
-output_dir = "D:/NasaData/daily"  # one file per day will be written here
+output_dir = "D:/NasaData/daily_missing"  # one file per day will be written here
+file_suffix = "_v1"  # suffix for output files (versions)
+mode  = "advanced"  # "simple" for (mean), "advanced" for others
+                    # currently calculates (mean, max, min, var), go to line 141 to change
 
-VAR_COLS = ["SPEED", "TLML", "QSH", "PRECTOT", "PRECSNO"]
+VAR_COLS = ["TLML", "SPEED"]
+# VAR_COLS = ["TAUTOT"]
+# VAR_COLS = ["SPEED", "TLML", "QSH", "PRECTOT", "PRECSNO"]
 # VAR_COLS = ["T2M", "QV2M", "U2M", "V2M"]
 COORD_COLS = ["lat", "lon", "time"]
 
 os.makedirs(output_dir, exist_ok=True)
 
 #%%
+# ---- Logging setup ----
 
 logging.addLevelName(25, 'MY_DEBUG')
 
@@ -53,13 +65,14 @@ logger = logging.getLogger(__name__)
 logger.setLevel(25)  # Ensure logger level is set explicitly
 
 #%%
+# ---- Downloading earthdata files ----
 
 # Authenticate
 auth = earthaccess.login()
 my_session = create_session()
 
 # Build the list of dates for the whole year
-dates = pd.date_range(f"{year}-01-01", f"{year}-12-31", freq="D")
+dates = pd.date_range(f"{year}-{start_date}", f"{year}-{end_date}", freq="D")
 
 # Get OPeNDAP URLs from earthaccess search results
 def _extract_opendap_urls(results):
@@ -112,19 +125,34 @@ for day in dates:
             raise ValueError("None of the requested VAR_COLS were found in the dataset")
         df = ds[present_vars].to_dataframe().reset_index()
 
-        # Average the times within the same day
+        # Add a date column
         df["date"] = df["time"].dt.date
         
-        daily = (
-            df.groupby(["lat", "lon"], as_index=False)
-              .mean(numeric_only=True)
-              .sort_values(["lat", "lon"])
-        )
-        # Add the date string column back as the first column
-        daily.insert(0, "date", day_str)
+        if mode == "simple":
+            # Average across the times within the same day
+            daily = (
+                df.groupby(["lat", "lon"], as_index=False)
+                .mean(numeric_only=True)
+                .sort_values(["lat", "lon"])
+            )
+            # Add the date string column back as the first column
+            daily.insert(0, "date", day_str)
+        
+        elif mode == "advanced":
+            # Compute statistics per day per location
+            grouped = df.groupby(["lat", "lon", "date"])
+
+            # daily_mean = grouped.mean(numeric_only=True).rename(columns=lambda x: f"{x}_mean")
+            daily_max = grouped.max(numeric_only=True).rename(columns=lambda x: f"{x}_max")
+            daily_min = grouped.min(numeric_only=True).rename(columns=lambda x: f"{x}_min")
+            daily_var = grouped.var(numeric_only=True).rename(columns=lambda x: f"{x}_var")
+
+            # daily = pd.concat([daily_mean, daily_max, daily_min, daily_var], axis=1).reset_index()
+            daily = pd.concat([daily_max, daily_min, daily_var], axis=1).reset_index()
+            daily = daily.sort_values(["lat", "lon"])
 
         # Write to one JSON per day
-        out_path = os.path.join(output_dir, f"{dataset}_{day_str}.json")
+        out_path = os.path.join(output_dir, f"{dataset}_{day_str}{file_suffix}.json")
         daily.to_json(out_path, orient="records", date_format="iso")
         print(f"Wrote EarthData file to {out_path}")
 
@@ -139,21 +167,20 @@ for day in dates:
 
 print("All done.")
 #%%
+# ---- Test querying the downloaded daily JSON files using bilinear interpolation ----
 
 # Pure vibe coding regarding bilinear interpolation from daily JSON files
 
 # Directory that holds one JSON per day created above
 read_dir = output_dir  # reuse the same output directory
 
-# Variables to interpolate
-VAR_COLS = ["T2M", "QV2M", "U2M", "V2M"]
 
-
-def load_daily_json(date_str: str) -> pd.DataFrame:
+def load_daily_json(date_str: str, file_suffix: str) -> pd.DataFrame:
     """Load the per-day JSON file and return a DataFrame.
     Expects filename pattern: {dataset}_{YYYY-MM-DD}.json in read_dir.
     """
-    path = os.path.join(read_dir, f"{dataset}_{date_str}.json")
+    logger.my_debug(f"Loading daily JSON for {dataset}_{date_str}{file_suffix}.json")
+    path = os.path.join(read_dir, f"{dataset}_{date_str}{file_suffix}.json")
     if not os.path.exists(path):
         raise FileNotFoundError(f"Daily JSON not found: {path}")
     df = pd.read_json(path, orient="records")
@@ -193,6 +220,7 @@ def bilinear_from_dataframe(daily_df: pd.DataFrame, lat_q: float, lon_q: float,
 
     Returns: dict with interpolated values for each var in var_cols and metadata.
     """
+    logger.my_debug(f"Querying lat={lat_q}, lon={lon_q}, date={date_str}")
     df = daily_df.copy()
     if date_str is not None and "date" in df.columns:
         df = df[df["date"] == date_str]
@@ -279,6 +307,7 @@ def bilinear_from_dataframe(daily_df: pd.DataFrame, lat_q: float, lon_q: float,
     out = {"method": "bilinear", "lat_bounds": [float(lat0), float(lat1)], "lon_bounds": [float(lon0), float(lon1)]}
 
     for v in var_cols:
+        logger.my_debug(f"Interpolating variable: {v}")
         # Pull values; if missing, try to degrade
         def val(p):
             return None if (p is None or v not in p) else float(p[v])
@@ -335,7 +364,7 @@ def bilinear_from_dataframe(daily_df: pd.DataFrame, lat_q: float, lon_q: float,
 
     # Also return the raw corner points used for transparency
     out["corners"] = [
-        {"lat": float(p["lat"]), "lon": float(p["lon"]) } for p in present[:4]
+        {"lat": float(p["lat"]), "lon": float(p["lon"]), **{v: float(p[v]) for v in var_cols if v in p}} for p in present[:4]
     ]
     out["tx"], out["ty"] = float(tx), float(ty)
     return out
@@ -343,10 +372,16 @@ def bilinear_from_dataframe(daily_df: pd.DataFrame, lat_q: float, lon_q: float,
 
 # ---- Example usage ----
 # Query parameters
-query_date = "1980-01-01"
-lat_q = -39.9
-lon_q = -172.0
+query_date = "2020-01-01"
+lat_q = 25.02
+lon_q = 121.33
+q_file_suffix = file_suffix  # to match the saved file
 
-_daily = load_daily_json(query_date)
-interp = bilinear_from_dataframe(_daily, lat_q, lon_q, VAR_COLS, date_str=query_date)
+_daily = load_daily_json(query_date, q_file_suffix)
+
+# all columns in the daily file except lon/lat/date
+q_var_cols = [vc for vc in _daily.columns if vc not in ("lat", "lon", "date")]
+logger.my_debug(f"Columns to interpolate: {q_var_cols}")
+
+interp = bilinear_from_dataframe(_daily, lat_q, lon_q, q_var_cols, date_str=query_date)
 print(json.dumps(interp, indent=2))
