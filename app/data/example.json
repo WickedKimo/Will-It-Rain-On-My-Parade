@@ -108,5 +108,71 @@
     "uvIndex": 4,
     "humidity": 48,
     "cloudCover": 38
+  },
+  "25.038_121.564_2016-10-05": {
+    "temp": 23,
+    "rainChance": 32,
+    "snowChance": 0,
+    "precipitation": 1,
+    "wind": 2,
+    "airQuality": "Good",
+    "uvIndex": 4,
+    "humidity": 48,
+    "cloudCover": 38
+  },
+  "25.038_121.564_2016-10-04": {
+    "temp": 25,
+    "rainChance": 32,
+    "snowChance": 0,
+    "precipitation": 1,
+    "wind": 2,
+    "airQuality": "Good",
+    "uvIndex": 4,
+    "humidity": 48,
+    "cloudCover": 38
+  },
+  "25.038_121.564_2017-10-04": {
+    "temp": 28,
+    "rainChance": 32,
+    "snowChance": 0,
+    "precipitation": 1,
+    "wind": 2,
+    "airQuality": "Good",
+    "uvIndex": 4,
+    "humidity": 48,
+    "cloudCover": 38
+  },
+  "25.038_121.564_2018-10-05": {
+    "temp": 26,
+    "rainChance": 32,
+    "snowChance": 0,
+    "precipitation": 1,
+    "wind": 2,
+    "airQuality": "Good",
+    "uvIndex": 4,
+    "humidity": 48,
+    "cloudCover": 38
+  },
+  "25.038_121.564_2018-10-06": {
+    "temp": 16,
+    "rainChance": 32,
+    "snowChance": 0,
+    "precipitation": 1,
+    "wind": 2,
+    "airQuality": "Good",
+    "uvIndex": 4,
+    "humidity": 48,
+    "cloudCover": 38
+  },
+  "25.038_121.564_2012-10-06": {
+    "temp": 18,
+    "rainChance": 32,
+    "snowChance": 0,
+    "precipitation": 1,
+    "wind": 2,
+    "airQuality": "Good",
+    "uvIndex": 4,
+    "humidity": 48,
+    "cloudCover": 38
   }
 }
