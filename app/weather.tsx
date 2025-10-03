@@ -32,7 +32,7 @@ type WeatherData = {
 	snowChance: number;
 	precipitation: number;
 	wind: number;
-	airQuality: string;
+	// airQuality: string;
 	uvIndex: number;
 	humidity: number;
 	cloudCover: number;
@@ -174,7 +174,7 @@ export default function WeatherScreen() {
 				snowChance: avg(items.map(w => w.snowChance)),
 				precipitation: avg(items.map(w => w.precipitation)),
 				wind: avg(items.map(w => w.wind)),
-				airQuality: items[0].airQuality,
+				// airQuality: items[0].airQuality,
 				uvIndex: avg(items.map(w => w.uvIndex)),
 				humidity: avg(items.map(w => w.humidity)),
 				cloudCover: avg(items.map(w => w.cloudCover)),
@@ -198,7 +198,7 @@ export default function WeatherScreen() {
 				snowChance: 0,
 				precipitation: 0,
 				wind: 0,
-				airQuality: "Unknown",
+				// airQuality: "Unknown",
 				uvIndex: 0,
 				humidity: 0,
 				cloudCover: 0,
@@ -220,7 +220,7 @@ export default function WeatherScreen() {
 			snowChance: avg(matches.map(w => w.snowChance)),
 			precipitation: avg(matches.map(w => w.precipitation)),
 			wind: avg(matches.map(w => w.wind)),
-			airQuality: matches[0].airQuality,
+			// airQuality: matches[0].airQuality,
 			uvIndex: avg(matches.map(w => w.uvIndex)),
 			humidity: avg(matches.map(w => w.humidity)),
 			cloudCover: avg(matches.map(w => w.cloudCover)),
@@ -283,13 +283,13 @@ export default function WeatherScreen() {
 				"單位": "m/s",
 			}
 		},
-		{
-			key: "空氣品質",
-			value: weather!.airQuality,
-			details: {
-				"說明": "根據 AQI 分級"
-			}
-		},
+		// {
+		// 	key: "空氣品質",
+		// 	value: weather!.airQuality,
+		// 	details: {
+		// 		"說明": "根據 AQI 分級"
+		// 	}
+		// },
 		{
 			key: "紫外線",
 			value: weather!.uvIndex,
@@ -405,7 +405,7 @@ export default function WeatherScreen() {
 		});
 
 		const showLineChart = (key: string) =>
-			["氣溫", "降水量", "風速", "空氣品質", "紫外線", "濕度", "雲層厚度"].includes(key) &&
+			["氣溫", "降水量", "風速", "紫外線", "濕度", "雲層厚度"].includes(key) &&
 			weatherList.length > 1 &&
 			isExpanded;
 
@@ -512,28 +512,28 @@ export default function WeatherScreen() {
 							},
 						],
 					};
-				case "空氣品質":
-					return {
-						labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
-						datasets: [
-							{
-								data: weatherList.map(w => {
-									const v = w.airQuality;
-									if (typeof v === "number") return v;
-									switch (v) {
-										case "優": return 1;
-										case "良": return 2;
-										case "普通": return 3;
-										case "差": return 4;
-										case "非常差": return 5;
-										default: return 0;
-									}
-								}),
-								color: () => "#32CD32",
-								strokeWidth: 2,
-							},
-						],
-					};
+				// case "空氣品質":
+				// 	return {
+				// 		labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
+				// 		datasets: [
+				// 			{
+				// 				data: weatherList.map(w => {
+				// 					const v = w.airQuality;
+				// 					if (typeof v === "number") return v;
+				// 					switch (v) {
+				// 						case "優": return 1;
+				// 						case "良": return 2;
+				// 						case "普通": return 3;
+				// 						case "差": return 4;
+				// 						case "非常差": return 5;
+				// 						default: return 0;
+				// 					}
+				// 				}),
+				// 				color: () => "#32CD32",
+				// 				strokeWidth: 2,
+				// 			},
+				// 		],
+				// 	};
 				case "紫外線":
 					return {
 						labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
@@ -578,8 +578,8 @@ export default function WeatherScreen() {
 					return useMiles ? "in" : "mm";
 				case "風速":
 					return "m/s";
-				case "空氣品質":
-					return "";
+				// case "空氣品質":
+				// 	return "";
 				case "紫外線":
 					return "";
 				case "濕度":
