@@ -766,12 +766,17 @@ export default function WeatherScreen() {
 
 			<SafeAreaView style={{ flex: 1, paddingTop: 60 }} ref={screenRef}>
 				{Platform.OS === "web" ? (
-					<div style={{ overflowY: "auto", height: "100vh", padding: 10 }}>
+					<div style={{ overflow: "auto", height: "100vh", padding: 10 }}>
 						<View id="weather-container">
-							<Text style={{ fontSize: 18, marginBottom: 10 }}>
-								<b>Weather Information</b> ({targetDate}) -{"\n"}
-								Latitude {Number(targetLatitude).toFixed(3)}, Longitude {Number(targetLongitude).toFixed(3)}
-							</Text>
+							<View style={{ marginBottom: 10 }}>
+								<Text style={{ fontSize: 18, fontWeight: "bold", color: "#0D47A1" }}>
+									Weather Data for <Text style={{ color: "#1976D2" }}>{targetDate}</Text>
+									{"\nLocation: "}<Text style={{ fontSize: 16, color: "#1976D2" }}>{location ? location : ""}</Text>
+								</Text>
+								<Text style={{ fontSize: 14, color: "#0D47A1" }}>
+									Latitude: {Number(targetLatitude).toFixed(3)}, Longitude: {Number(targetLongitude).toFixed(3)}
+								</Text>
+							</View>
 							{rows.map((item) => renderRow(item))}
 							<View style={{ height: settingsVisible ? btnPanelHeight + 20 : btnHeight + 20 }} />
 						</View>
@@ -781,14 +786,30 @@ export default function WeatherScreen() {
 						style={{ flex: 1, minHeight: 0, padding: 10 }}
 						contentContainerStyle={{ paddingBottom: 50 }}
 					>
-						<View id="weather-container">
-							<Text style={{ fontSize: 18, marginBottom: 10 }}>
-								Weather Information ({targetDate}) -{"\n"}
-								Latitude {Number(targetLatitude).toFixed(3)}, Longitude {Number(targetLongitude).toFixed(3)}
+						<View
+							id="weather-container"
+							style={{
+							padding: 12,
+							borderRadius: 12,
+							backgroundColor: "#E3F2FD",
+							shadowColor: "#000",
+							shadowOffset: { width: 0, height: 2 },
+							shadowOpacity: 0.1,
+							shadowRadius: 4,
+							elevation: 3,
+							marginBottom: 10,
+							}}
+						>
+							<Text style={{ fontSize: 20, fontWeight: "bold", color: "#0D47A1", marginBottom: 4 }}>
+								Weather Data for <Text style={{ color: "#1976D2" }}>{targetDate}</Text>
 							</Text>
-							{rows.map((item) => renderRow(item))}
-							<View style={{ height: settingsVisible ? btnPanelHeight + 20 : btnHeight + 20 }} />
+							<Text style={{ fontSize: 14, color: "#0D47A1" }}>
+								Latitude: {Number(targetLatitude).toFixed(3)}, Longitude: {Number(targetLongitude).toFixed(3)}
+								{location ? `\nLocation: ${location}` : ""}
+							</Text>
 						</View>
+							{rows.map((item) => renderRow(item))}
+						<View style={{ height: settingsVisible ? btnPanelHeight + 20 : btnHeight + 20 }} />
 					</ScrollView>
 				)}
 
