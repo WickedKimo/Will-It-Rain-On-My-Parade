@@ -18,8 +18,6 @@ import {
 import { BarChart, LineChart } from "react-native-chart-kit";
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import weatherData from "./data/example.json";
-
 import * as FileSystem from "expo-file-system";
 import { useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
@@ -128,24 +126,25 @@ export default function WeatherScreen() {
 	const targetLatitude = Number(latitude).toFixed(3);
 	const targetLongitude = Number(longitude).toFixed(3);
 
+	const [weatherData, setWeatherData] = useState<Record<string, WeatherData>>({});
 	useEffect(() => {
 		const callPython = async () => {
-			const response = await fetch("http://localhost:5000/add", {
+			const response = await fetch("http://localhost:5000/getWeather", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				a: 5,
-				b: 10,
-				latitude: targetLatitude,
-				longitude: targetLongitude
-			}),
+				body: JSON.stringify({
+					latitude: targetLatitude,
+					longitude: targetLongitude,
+					date: date,
+					startDate: startDate,
+					endDate: endDate
+				}),
 			});
-			const data = await response.json();
-			console.log("Saved file:", data.filename);
+			setWeatherData(await response.json());
 		};
 
 		callPython();
-	}, []);
+	}, [date, targetDate]);
 
 	const [weather, setWeather] = useState<WeatherData | null>(null);
 	const [loading, setLoading] = useState(true);
@@ -247,7 +246,7 @@ export default function WeatherScreen() {
 
 		setWeather(weatherAvg);
 		setLoading(false);
-	}, [date, targetDate]);
+	}, [date, weatherData, targetDate]);
 
 	if (loading) return <ActivityIndicator style={{ flex: 1 }} />;
 
@@ -620,7 +619,7 @@ export default function WeatherScreen() {
 
 					<Text style={styles.rowText}>
 						{item.key}: {typeof item.value === "number" ? item.value.toFixed(1) : item.value}
-						{item.details["單位"] ? ` ${item.details["單位"]}` : ""}
+						{item.details["Unit"] ? ` ${item.details["Unit"]}` : ""}
 					</Text>
 				</View>
 
@@ -770,7 +769,7 @@ export default function WeatherScreen() {
 					<div style={{ overflowY: "auto", height: "100vh", padding: 10 }}>
 						<View id="weather-container">
 							<Text style={{ fontSize: 18, marginBottom: 10 }}>
-								Weather Information ({targetDate}) -{"\n"}
+								<b>Weather Information</b> ({targetDate}) -{"\n"}
 								Latitude {Number(targetLatitude).toFixed(3)}, Longitude {Number(targetLongitude).toFixed(3)}
 							</Text>
 							{rows.map((item) => renderRow(item))}
