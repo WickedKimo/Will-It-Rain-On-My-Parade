@@ -18,6 +18,7 @@ import {
 import { BarChart, LineChart } from "react-native-chart-kit";
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Picker } from '@react-native-picker/picker';
 import * as FileSystem from "expo-file-system";
 import { useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
@@ -36,6 +37,39 @@ type WeatherData = {
 	cloudCover: number;
 	date?: string;
 };
+
+type HighlightMetric =
+  | "hottest"
+  | "coldest"
+  | "windiest"
+  | "leastWindy"
+  | "rainiest"
+  | "leastRainy"
+  | "wettest"
+  | "driest"
+  | "highestUV"
+  | "lowestUV"
+  | "mostHumid"
+  | "leastHumid"
+  | "cloudiest"
+  | "clearest";
+
+const highlightOptions: [string, HighlightMetric][] = [
+  ["Hottest Day", "hottest"],
+  ["Coldest Day", "coldest"],
+  ["Windiest Day", "windiest"],
+  ["Calmest Day", "leastWindy"],
+  ["Rainiest Day", "rainiest"],
+  ["Driest Day", "leastRainy"],
+  ["Wettest Day", "wettest"],
+  ["Least Wet Day", "driest"],
+  ["Highest UV Index", "highestUV"],
+  ["Lowest UV Index", "lowestUV"],
+  ["Most Humid Day", "mostHumid"],
+  ["Least Humid Day", "leastHumid"],
+  ["Cloudiest Day", "cloudiest"],
+  ["Clearest Day", "clearest"],
+];
 
 function getMonthDay(dateStr: string) {
 	const d = dateStr.replace("_", "-").replace(/\//g, "-").split("-");
@@ -90,6 +124,11 @@ function getWeatherMatchesInRange(
 		return matches;
 }
 
+function replaceMonthDayInDate(originalDate: string, newMonthDay: string) {
+	const [year] = originalDate.split("-");
+	return `${year}-${newMonthDay}`;
+}
+
 type RowItem = {
 	key: string;
 	value: number | string;
@@ -119,10 +158,6 @@ export default function WeatherScreen() {
 		endDate: string
 	};
 	const [targetDate, setTargetDate] = useState(date || "");
-	function replaceMonthDayInDate(originalDate: string, newMonthDay: string) {
-		const [year] = originalDate.split("-");
-		return `${year}-${newMonthDay}`;
-	}
 	const targetLatitude = Number(latitude).toFixed(3);
 	const targetLongitude = Number(longitude).toFixed(3);
 
@@ -144,7 +179,7 @@ export default function WeatherScreen() {
 		};
 
 		callPython();
-	}, [date, targetDate]);
+	}, [date]);
 
 	const [weather, setWeather] = useState<WeatherData | null>(null);
 	const [loading, setLoading] = useState(true);
@@ -156,6 +191,7 @@ export default function WeatherScreen() {
 	const [useFahrenheit, setUseFahrenheit] = useState(false);
 	const [useDewPoint, setUseDewPoint] = useState(false);
 	const [useMiles, setUseMiles] = useState(false);
+	const [highlightMetric, setHighlightMetric] = useState<HighlightMetric>("hottest");
 
 	// Bottom settings panel
 	const [settingsVisible, setSettingsVisible] = useState(false);
@@ -164,7 +200,7 @@ export default function WeatherScreen() {
 	const [weatherList, setWeatherList] = useState<WeatherData[]>([]);
 
 	useEffect(() => {
-		if (!targetDate) {
+		if (startDate && endDate) {
 			const targetMonthDays = getMonthDaysInRange(startDate, endDate);
 			const matches = getWeatherMatchesInRange(weatherData, targetLatitude, targetLongitude, targetMonthDays);
 
@@ -198,11 +234,28 @@ export default function WeatherScreen() {
 				} as WeatherData;
 			});
 
-			const hottestAvg = dailyAvgs.reduce((prev, curr) =>
-				curr.temp > prev.temp ? curr : prev
-			);
-			const hottestMonthDay = getMonthDay(hottestAvg.date!);
-			setTargetDate(replaceMonthDayInDate(endDate || hottestAvg.date!, hottestMonthDay));
+			const targetDay = dailyAvgs.reduce((prev, curr) => {
+				switch (highlightMetric) {
+					case "hottest": return curr.temp > prev.temp ? curr : prev;
+					case "coldest": return curr.temp < prev.temp ? curr : prev;
+					case "windiest": return curr.wind > prev.wind ? curr : prev;
+					case "leastWindy": return curr.wind < prev.wind ? curr : prev;
+					case "rainiest": return (curr.rainChance + curr.snowChance) > (prev.rainChance + prev.snowChance) ? curr : prev;
+					case "leastRainy": return (curr.rainChance + curr.snowChance) < (prev.rainChance + prev.snowChance) ? curr : prev;
+					case "wettest": return curr.precipitation > prev.precipitation ? curr : prev;
+					case "driest": return curr.precipitation < prev.precipitation ? curr : prev;
+					case "highestUV": return curr.uvIndex > prev.uvIndex ? curr : prev;
+					case "lowestUV": return curr.uvIndex < prev.uvIndex ? curr : prev;
+					case "mostHumid": return curr.humidity > prev.humidity ? curr : prev;
+					case "leastHumid": return curr.humidity < prev.humidity ? curr : prev;
+					case "cloudiest": return curr.cloudCover > prev.cloudCover ? curr : prev;
+					case "clearest": return curr.cloudCover < prev.cloudCover ? curr : prev;
+					default: return prev;
+				}
+			});
+
+			const targetMonthDay = getMonthDay(targetDay.date!);
+			setTargetDate(replaceMonthDayInDate(endDate || targetDay.date!, targetMonthDay));
 		}
 
 		const targetMonthDay = getMonthDay(targetDate);
@@ -246,7 +299,7 @@ export default function WeatherScreen() {
 
 		setWeather(weatherAvg);
 		setLoading(false);
-	}, [date, weatherData, targetDate]);
+	}, [weatherData, targetDate, highlightMetric]);
 
 	if (loading) return <ActivityIndicator style={{ flex: 1 }} />;
 
@@ -701,7 +754,7 @@ export default function WeatherScreen() {
 			inputRange: [0, 1],
 			outputRange: [btnPanelHeight, 0],
 		});
-
+		
 		return (
 			<Animated.View
 				style={[
@@ -725,6 +778,28 @@ export default function WeatherScreen() {
 					<Text>Use Inches</Text>
 					<Switch value={useMiles} onValueChange={setUseMiles} />
 				</View>
+				<View>
+					<Text style={{ fontSize: 14, fontWeight: "500", color: "#0D47A1", marginBottom: 6 }}>
+						Highlight day (from {startDate} to {endDate})
+					</Text>
+					<View style={{ borderWidth: 1, borderColor: "#90CAF9", borderRadius: 8, overflow: "hidden", marginBottom: 6 }}>
+						<Picker
+							selectedValue={highlightMetric}
+							onValueChange={(val) => setHighlightMetric(val as HighlightMetric)}
+							style={{
+								color: "#0D47A1",
+								paddingVertical: 10,
+								paddingHorizontal: 10,
+								backgroundColor: "#fff",
+							}}
+							dropdownIconColor="#0D47A1"
+						>
+							{highlightOptions.map(([label, value]) => (
+							<Picker.Item key={value} label={label} value={value} />
+							))}
+						</Picker>
+					</View>
+				</View>
 			</Animated.View>
 		);
 	};
@@ -740,7 +815,7 @@ export default function WeatherScreen() {
 		],
 	};
 
-	const btnPanelHeight = Platform.OS === "web" ? 210 : 150;
+	const btnPanelHeight = Platform.OS === "web" ? 270 : 210;
 	const btnHeight = Platform.OS === "web" ? 80 : 20;
 	const btnBottom = settingsAnim.interpolate({
 		inputRange: [0, 1],
@@ -769,12 +844,18 @@ export default function WeatherScreen() {
 					<div style={{ overflow: "auto", height: "100vh", padding: 10 }}>
 						<View id="weather-container">
 							<View style={{ marginBottom: 10 }}>
-								<Text style={{ fontSize: 18, fontWeight: "bold", color: "#0D47A1" }}>
+								<Text style={{ fontSize: 20, fontWeight: "bold", color: "#0D47A1", marginBottom: 4 }}>
 									Weather Data for <Text style={{ color: "#1976D2" }}>{targetDate}</Text>
-									{"\nLocation: "}<Text style={{ fontSize: 16, color: "#1976D2" }}>{location ? location : ""}</Text>
+								</Text>
+								<Text style={{ fontSize: 14, color: "#1976D2", marginBottom: 4 }}>
+									  (Showing {
+											highlightOptions.find(([_, value]) => value === highlightMetric)?.[0] 
+											|| highlightMetric
+										} day within {startDate} – {endDate})
 								</Text>
 								<Text style={{ fontSize: 14, color: "#0D47A1" }}>
-									Latitude: {Number(targetLatitude).toFixed(3)}, Longitude: {Number(targetLongitude).toFixed(3)}
+									{location ? `Location: ${location}\n` : ""}
+									Latitude: {targetLatitude}, Longitude: {targetLongitude}
 								</Text>
 							</View>
 							{rows.map((item) => renderRow(item))}

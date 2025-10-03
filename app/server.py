@@ -24,7 +24,9 @@ def generate_weather_data(lat, lng, start_date, end_date, years=None):
     weather_data = {}
 
     if years is None:
-        years = [2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025]
+        years = [2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,
+                 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019,
+                 2020, 2021, 2022, 2023, 2024, 2025]
 
     delta = timedelta(days=1)
     start_dt_orig = datetime.strptime(start_date, "%Y-%m-%d")
@@ -38,10 +40,10 @@ def generate_weather_data(lat, lng, start_date, end_date, years=None):
             key = f"{lat}_{lng}_{date_str}"
             weather_data[key] = {
                 "temp": 20 + (curr_dt.day % 10) + random.randint(0, 5),
-                "rainChance": (curr_dt.day % 50),
-                "snowChance": (curr_dt.day % 10),
+                "rainChance": (curr_dt.day % 50) + random.randint(0, 5),
+                "snowChance": (curr_dt.day % 10) + random.randint(0, 5),
                 "precipitation": (curr_dt.day % 20),
-                "wind": 5 + (curr_dt.day % 5),
+                "wind": 5 + (curr_dt.day % 5) + random.randint(0, 5),
                 "uvIndex": (curr_dt.day % 12),
                 "humidity": 50 + (curr_dt.day % 50),
                 "cloudCover": (curr_dt.day % 100),

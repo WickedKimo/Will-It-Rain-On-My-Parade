@@ -43,3 +43,6 @@ app-example
 /android
 
 .venv
+
+# Ignore generated weather JSON files
+*_*.json
