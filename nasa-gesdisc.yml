@@ -1,0 +1,25 @@
+name: nasa-gesdisc
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - xarray=2025.4.0
+  - dask
+  - pandas
+  - seaborn
+  - matplotlib
+  - numpy=1.25.2
+  - cartopy
+  - h5netcdf
+  - h5py
+  - earthaccess
+  - pip
+  - pip:
+      - netcdf4==1.6.2
+      - notebook
+      - ipywidgets
+      - widgetsnbextension
+      - pandas-profiling
+      - lxml
+      - tabulate
