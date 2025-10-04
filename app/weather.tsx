@@ -1,4 +1,4 @@
-// app/weather.tsx
+// app/weather.tsx - Enhanced for NASA Hackathon
 import { AntDesign } from "@expo/vector-icons";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
@@ -31,7 +31,6 @@ type WeatherData = {
 	snowChance: number;
 	precipitation: number;
 	wind: number;
-	// airQuality: string;
 	uvIndex: number;
 	humidity: number;
 	cloudCover: number;
@@ -39,39 +38,39 @@ type WeatherData = {
 };
 
 type HighlightMetric =
-  | "hottest"
-  | "coldest"
-  | "windiest"
-  | "leastWindy"
-  | "rainiest"
-  | "leastRainy"
-  | "wettest"
-  | "driest"
-  | "highestUV"
-  | "lowestUV"
-  | "mostHumid"
-  | "leastHumid"
-  | "cloudiest"
-  | "clearest";
+	| "hottest"
+	| "coldest"
+	| "windiest"
+	| "leastWindy"
+	| "rainiest"
+	| "leastRainy"
+	| "wettest"
+	| "driest"
+	| "highestUV"
+	| "lowestUV"
+	| "mostHumid"
+	| "leastHumid"
+	| "cloudiest"
+	| "clearest";
 
 const highlightOptions: [string, HighlightMetric][] = [
-  ["Hottest Day", "hottest"],
-  ["Coldest Day", "coldest"],
-  ["Windiest Day", "windiest"],
-  ["Calmest Day", "leastWindy"],
-  ["Rainiest Day", "rainiest"],
-  ["Driest Day", "leastRainy"],
-  ["Wettest Day", "wettest"],
-  ["Least Wet Day", "driest"],
-  ["Highest UV Index", "highestUV"],
-  ["Lowest UV Index", "lowestUV"],
-  ["Most Humid Day", "mostHumid"],
-  ["Least Humid Day", "leastHumid"],
-  ["Cloudiest Day", "cloudiest"],
-  ["Clearest Day", "clearest"],
+	["Hottest Day", "hottest"],
+	["Coldest Day", "coldest"],
+	["Windiest Day", "windiest"],
+	["Calmest Day", "leastWindy"],
+	["Rainiest Day", "rainiest"],
+	["Driest Day", "leastRainy"],
+	["Wettest Day", "wettest"],
+	["Least Wet Day", "driest"],
+	["Highest UV Index", "highestUV"],
+	["Lowest UV Index", "lowestUV"],
+	["Most Humid Day", "mostHumid"],
+	["Least Humid Day", "leastHumid"],
+	["Cloudiest Day", "cloudiest"],
+	["Clearest Day", "clearest"],
 ];
 
-const btnPanelHeight = Platform.OS === "web" ? 270 : 210;
+const btnPanelHeight = Platform.OS === "web" ? 320 : 260;
 const btnHeight = Platform.OS === "web" ? 80 : 20;
 
 function getMonthDay(dateStr: string) {
@@ -100,15 +99,15 @@ function getWeatherMatches(
 	lat: string,
 	lng: string,
 	targetMonthDay: string
-	): WeatherData[] {
-		const matches: WeatherData[] = [];
-		Object.entries(data).forEach(([key, value]) => {
-			const [kLat, kLng, kDate] = key.split("_");
-			if (kLat === lat && kLng === lng && getMonthDay(kDate) === targetMonthDay) {
-				matches.push({ ...(value as WeatherData), date: kDate });
-			}
-		});
-		return matches;
+): WeatherData[] {
+	const matches: WeatherData[] = [];
+	Object.entries(data).forEach(([key, value]) => {
+		const [kLat, kLng, kDate] = key.split("_");
+		if (kLat === lat && kLng === lng && getMonthDay(kDate) === targetMonthDay) {
+			matches.push({ ...(value as WeatherData), date: kDate });
+		}
+	});
+	return matches;
 }
 
 function getWeatherMatchesInRange(
@@ -116,15 +115,15 @@ function getWeatherMatchesInRange(
 	lat: string,
 	lng: string,
 	monthDays: string[]
-	): WeatherData[] {
-		const matches: WeatherData[] = [];
-		Object.entries(data).forEach(([key, value]) => {
-			const [kLat, kLng, kDate] = key.split("_");
-			if (kLat === lat && kLng === lng && monthDays.includes(getMonthDay(kDate))) {
-				matches.push({ ...(value as WeatherData), date: kDate });
-			}
-		});
-		return matches;
+): WeatherData[] {
+	const matches: WeatherData[] = [];
+	Object.entries(data).forEach(([key, value]) => {
+		const [kLat, kLng, kDate] = key.split("_");
+		if (kLat === lat && kLng === lng && monthDays.includes(getMonthDay(kDate))) {
+			matches.push({ ...(value as WeatherData), date: kDate });
+		}
+	});
+	return matches;
 }
 
 function replaceMonthDayInDate(originalDate: string, newMonthDay: string) {
@@ -154,6 +153,8 @@ type RowItem = {
 	key: string;
 	value: number | string;
 	details: Record<string, any>;
+	probability?: string;
+	trend?: string;
 };
 
 export default function WeatherScreen() {
@@ -170,15 +171,92 @@ export default function WeatherScreen() {
 		return (b * alpha) / (a - alpha);
 	}
 
+	// Enhanced JSON export with metadata
 	async function shareAsJson() {
-		if (!weather) return;
-		const fileUri = (FileSystem as any).cacheDirectory + `weather_${targetLatitude}_${targetLongitude}_${targetDate}.json`;
-		await FileSystem.writeAsStringAsync(fileUri, JSON.stringify(weather, null, 2));
+		if (!weather || !weatherList.length) return;
+
+		const metadata = {
+			query_info: {
+				location: location || `${targetLatitude}, ${targetLongitude}`,
+				latitude: Number(targetLatitude),
+				longitude: Number(targetLongitude),
+				query_date: targetDate,
+				date_mode: dateMode,
+				start_date: startDate,
+				end_date: endDate,
+				is_area_query: params.isArea === 'true',
+				area_bounds: params.isArea === 'true' ? {
+					north: params.areaNorth,
+					south: params.areaSouth,
+					east: params.areaEast,
+					west: params.areaWest
+				} : null,
+				generated_at: new Date().toISOString()
+			},
+			data_source: {
+				provider: "NASA Earth Observations",
+				description: "Historical weather data based on NASA satellite observations and climate models",
+				years_analyzed: weatherList.map(w => w.date?.split('-')[0]).filter((v, i, a) => a.indexOf(v) === i).join(', '),
+				total_data_points: weatherList.length
+			},
+			units: {
+				temperature: useFahrenheit ? "°F" : "°C",
+				precipitation: useMiles ? "inches" : "mm",
+				wind_speed: useMiles ? "mph" : "m/s",
+				humidity: useDewPoint ? (useFahrenheit ? "°F (Dew Point)" : "°C (Dew Point)") : "%",
+				uv_index: "index (0-11+)",
+				cloud_cover: "%",
+				precipitation_probability: "%"
+			},
+			summary: {
+				average_temperature: Number(convertTemp(weather.temp)),
+				precipitation_probability: Number((weather.rainChance + weather.snowChance).toFixed(1)),
+				average_wind_speed: Number(convertWindSpeed(weather.wind)),
+				average_humidity: Number(convertHumidity(weather.humidity)),
+				average_uv_index: Number(weather.uvIndex.toFixed(1)),
+				average_cloud_cover: Number(weather.cloudCover.toFixed(1))
+			},
+			historical_data: weatherList.map(w => ({
+				year: w.date?.split('-')[0],
+				date: w.date,
+				temperature: Number((useFahrenheit ? w.temp * 1.8 + 32 : w.temp).toFixed(1)),
+				rain_chance: Number(w.rainChance.toFixed(1)),
+				snow_chance: Number(w.snowChance.toFixed(1)),
+				precipitation: Number((useMiles ? w.precipitation * 0.03937 : w.precipitation).toFixed(1)),
+				wind_speed: Number((useMiles ? w.wind * 2.23694 : w.wind).toFixed(1)),
+				uv_index: Number(w.uvIndex.toFixed(1)),
+				humidity: useDewPoint ? Number(convertTemp(magnusDewPoint(w.temp, w.humidity))) : Number(w.humidity.toFixed(1)),
+				cloud_cover: Number(w.cloudCover.toFixed(1))
+			})),
+			statistics: {
+				temperature: {
+					mean: Number(convertTemp(weather.temp)),
+					min: Number(convertTemp(Math.min(...weatherList.map(w => w.temp)))),
+					max: Number(convertTemp(Math.max(...weatherList.map(w => w.temp)))),
+					std_dev: Number(calculateStdDev(weatherList.map(w => useFahrenheit ? w.temp * 1.8 + 32 : w.temp)).toFixed(2))
+				},
+				precipitation: {
+					mean: Number(convertPrecipitation(weather.precipitation)),
+					total: Number((weatherList.reduce((sum, w) => sum + (useMiles ? w.precipitation * 0.03937 : w.precipitation), 0)).toFixed(1)),
+					probability_above_threshold: `${((weatherList.filter(w => w.precipitation > 5).length / weatherList.length) * 100).toFixed(1)}%`
+				}
+			}
+		};
+
+		const fileUri = (FileSystem as any).cacheDirectory + `nasa_weather_data_${targetLatitude}_${targetLongitude}_${targetDate}.json`;
+		await FileSystem.writeAsStringAsync(fileUri, JSON.stringify(metadata, null, 2));
 		if (await Sharing.isAvailableAsync()) {
 			await Sharing.shareAsync(fileUri);
 		} else {
 			alert("Sharing not available on this platform.");
 		}
+	}
+
+	function calculateStdDev(values: number[]): number {
+		const avg = values.reduce((a, b) => a + b, 0) / values.length;
+		const squareDiffs = values.map(value => Math.pow(value - avg, 2));
+		const avgSquareDiff = squareDiffs.reduce((a, b) => a + b, 0) / values.length;
+		return Math.sqrt(avgSquareDiff);
 	}
 
 	async function shareScreenshot() {
@@ -195,79 +273,60 @@ export default function WeatherScreen() {
 	}
 
 	function downloadJsonWeb() {
-		if (!weather) return;
+		if (!weather || !weatherList.length) return;
 
-		const adjusted: any = {
-			temperature: Number(convertTemp(weather.temp)),
-			temperature_unit: useFahrenheit ? "°F" : "°C",
-
-			rainChance: Number(weather.rainChance),
-			rainChance_unit: "%",
-
-			snowChance: Number(weather.snowChance),
-			snowChance_unit: "%",
-
-			precipitation: Number(convertPrecipitation(weather.precipitation)),
-			precipitation_unit: useMiles ? "in" : "mm",
-
-			wind: Number(convertWindSpeed(weather.wind)),
-			wind_unit: useMiles ? "mph" : "m/s",
-
-			uvIndex: Number(weather.uvIndex),
-			uvIndex_unit: "index",
-
-			humidity: Number(convertHumidity(weather.humidity)),
-			humidity_unit: useDewPoint ? (useFahrenheit ? "°F" : "°C") : "%",
+		const metadata = {
+			query_info: {
+				location: location || `${targetLatitude}, ${targetLongitude}`,
+				latitude: Number(targetLatitude),
+				longitude: Number(targetLongitude),
+				query_date: targetDate,
+				date_mode: dateMode,
+				generated_at: new Date().toISOString()
+			},
+			data_source: "NASA Earth Observations (Historical Climate Data)",
+			units: {
+				temperature: useFahrenheit ? "°F" : "°C",
+				precipitation: useMiles ? "in" : "mm",
+				wind_speed: useMiles ? "mph" : "m/s",
+				humidity: useDewPoint ? "Dew Point" : "Relative Humidity %"
+			},
+			summary: {
+				temperature: Number(convertTemp(weather.temp)),
+				precipitation_probability: Number((weather.rainChance + weather.snowChance).toFixed(1)),
+				wind_speed: Number(convertWindSpeed(weather.wind)),
+				humidity: Number(convertHumidity(weather.humidity)),
+				uv_index: Number(weather.uvIndex.toFixed(1)),
+				cloud_cover: Number(weather.cloudCover.toFixed(1))
+			},
+			historical_data: weatherList.map(w => ({
+				year: w.date?.split('-')[0],
+				date: w.date,
+				temperature: Number((useFahrenheit ? w.temp * 1.8 + 32 : w.temp).toFixed(1)),
+				precipitation: Number((useMiles ? w.precipitation * 0.03937 : w.precipitation).toFixed(1)),
+				wind_speed: Number((useMiles ? w.wind * 2.23694 : w.wind).toFixed(1))
+			}))
 		};
 
-		if (useDewPoint) {
-			adjusted.dewPoint = Number(convertHumidity(weather.humidity));
-			adjusted.dewPoint_unit = useFahrenheit ? "°F" : "°C";
-			delete adjusted.humidity;
-			delete adjusted.humidity_unit;
-		} else {
-			adjusted.humidity = Number(weather.humidity);
-			adjusted.humidity_unit = "%";
-		}
-
-		adjusted.cloudCover = Number(weather.cloudCover),
-		adjusted.cloudCover_unit = "%"
-		
-		const blob = new Blob([JSON.stringify(adjusted, null, 2)], {
+		const blob = new Blob([JSON.stringify(metadata, null, 2)], {
 			type: "application/json",
 		});
 		const url = URL.createObjectURL(blob);
 		const a = document.createElement("a");
 		a.href = url;
-		a.download = `weather_${targetLatitude}_${targetLongitude}_${targetDate}.json`;
+		a.download = `nasa_weather_${targetLatitude}_${targetLongitude}_${targetDate}.json`;
 		a.click();
 		URL.revokeObjectURL(url);
 	}
 
 	async function downloadScreenshotWeb() {
 		alert("Please use the web browser's built-in screenshot function (e.g. Print to PDF) to capture the content.");
-		// if (Platform.OS !== "web") return;
-		//     try {
-		//         const element = document.querySelector("#weather-container") as HTMLElement;
-		//         if (!element) return;
-
-		//         const canvas = await html2canvas(element);
-		//         const dataUrl = canvas.toDataURL("image/png");
-
-		//         const a = document.createElement("a");
-		//         a.href = dataUrl;
-		//         a.download = `weather_${targetLatitude}_${targetLongitude}_${targetDate}.png`;
-		//         a.click();
-		//     } catch (err) {
-		//         console.error("Web screenshot failed", err);
-		//     }
 	}
 
 	//	--------------------	--------------------	--------------------
 	//	--------------------   Main logic starts here   --------------------
 	//	--------------------	--------------------	--------------------
 	const params = useLocalSearchParams();
-	// const router = useRouter();
 	const insets = useSafeAreaInsets();
 
 	const {
@@ -295,8 +354,8 @@ export default function WeatherScreen() {
 	useEffect(() => {
 		const callPython = async () => {
 			const response = await fetch("https://will-it-rain-on-my-parade-ecc0.onrender.com/getWeather", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
 					latitude: targetLatitude,
 					longitude: targetLongitude,
@@ -322,18 +381,21 @@ export default function WeatherScreen() {
 	const [useDewPoint, setUseDewPoint] = useState(false);
 	const [useMiles, setUseMiles] = useState(false);
 	const [highlightMetric, setHighlightMetric] = useState<HighlightMetric>("hottest");
+	const [showProbabilities, setShowProbabilities] = useState(true);
 
 	useEffect(() => {
 		loadPreference("useFahrenheit", false).then(setUseFahrenheit);
 		loadPreference("useDewPoint", false).then(setUseDewPoint);
 		loadPreference("useMiles", false).then(setUseMiles);
 		loadPreference("highlightMetric", "hottest").then(setHighlightMetric);
+		loadPreference("showProbabilities", true).then(setShowProbabilities);
 	}, []);
 
 	useEffect(() => { savePreference("useFahrenheit", useFahrenheit); }, [useFahrenheit]);
 	useEffect(() => { savePreference("useDewPoint", useDewPoint); }, [useDewPoint]);
 	useEffect(() => { savePreference("useMiles", useMiles); }, [useMiles]);
 	useEffect(() => { savePreference("highlightMetric", highlightMetric); }, [highlightMetric]);
+	useEffect(() => { savePreference("showProbabilities", showProbabilities); }, [showProbabilities]);
 
 	// Bottom settings panel
 	const [settingsVisible, setSettingsVisible] = useState(false);
@@ -363,16 +425,15 @@ export default function WeatherScreen() {
 
 			const dailyAvgs = Object.entries(grouped).map(([date, items]) => {
 				return {
-				date,
-				temp: avg(items.map(w => w.temp)),
-				rainChance: avg(items.map(w => w.rainChance)),
-				snowChance: avg(items.map(w => w.snowChance)),
-				precipitation: avg(items.map(w => w.precipitation)),
-				wind: avg(items.map(w => w.wind)),
-				// airQuality: items[0].airQuality,
-				uvIndex: avg(items.map(w => w.uvIndex)),
-				humidity: avg(items.map(w => w.humidity)),
-				cloudCover: avg(items.map(w => w.cloudCover)),
+					date,
+					temp: avg(items.map(w => w.temp)),
+					rainChance: avg(items.map(w => w.rainChance)),
+					snowChance: avg(items.map(w => w.snowChance)),
+					precipitation: avg(items.map(w => w.precipitation)),
+					wind: avg(items.map(w => w.wind)),
+					uvIndex: avg(items.map(w => w.uvIndex)),
+					humidity: avg(items.map(w => w.humidity)),
+					cloudCover: avg(items.map(w => w.cloudCover)),
 				} as WeatherData;
 			});
 
@@ -410,7 +471,6 @@ export default function WeatherScreen() {
 				snowChance: 0,
 				precipitation: 0,
 				wind: 0,
-				// airQuality: "Unknown",
 				uvIndex: 0,
 				humidity: 0,
 				cloudCover: 0,
@@ -432,7 +492,6 @@ export default function WeatherScreen() {
 			snowChance: avg(matches.map(w => w.snowChance)),
 			precipitation: avg(matches.map(w => w.precipitation)),
 			wind: avg(matches.map(w => w.wind)),
-			// airQuality: matches[0].airQuality,
 			uvIndex: avg(matches.map(w => w.uvIndex)),
 			humidity: avg(matches.map(w => w.humidity)),
 			cloudCover: avg(matches.map(w => w.cloudCover)),
@@ -450,14 +509,39 @@ export default function WeatherScreen() {
 	const convertWindSpeed = (val: number) => (useMiles ? val * 2.23694 : val).toFixed(1);
 	const convertHumidity = (val: number) => (useDewPoint ? Number(convertTemp(magnusDewPoint(weather!.temp, val))) : val).toFixed(1);
 
+	// Calculate probabilities for each threshold
+	const calculateProbability = (key: string, threshold: number): string => {
+		let count = 0;
+		weatherList.forEach(w => {
+			let value = 0;
+			switch (key) {
+				case "Temperature":
+					value = useFahrenheit ? w.temp * 1.8 + 32 : w.temp;
+					if (value > threshold) count++;
+					break;
+				case "Precipitation Amount":
+					value = useMiles ? w.precipitation * 0.03937 : w.precipitation;
+					if (value > threshold) count++;
+					break;
+				case "Wind Speed":
+					if (w.wind > threshold) count++;
+					break;
+			}
+		});
+		return `${((count / weatherList.length) * 100).toFixed(1)}%`;
+	};
+
 	const rows: RowItem[] = [
 		{
 			key: "Temperature",
 			value: convertTemp(weather!.temp),
+			probability: showProbabilities ? `${calculateProbability("Temperature", useFahrenheit ? 90 : 32)} above ${useFahrenheit ? '90°F' : '32°C'}` : undefined,
 			details: {
 				"Unit": useFahrenheit ? "°F" : "°C",
 				"Apparent Temperature": convertTemp(steadmanApparentTemp(weather!.temp, weather!.humidity, weather!.wind)) + " " + (useFahrenheit ? "°F" : "°C"),
-				"Description": "Apparent temperature is calculated based on temperature, humidity, and wind speed"
+				"Years of Data": `${weatherList.length} years`,
+				"Data Range": weatherList.length > 0 ? `${convertTemp(Math.min(...weatherList.map(w => w.temp)))} to ${convertTemp(Math.max(...weatherList.map(w => w.temp)))}` : "N/A",
+				"Description": "Based on NASA Earth observations. Apparent temperature calculated from temperature, humidity, and wind speed"
 			},
 		},
 		{
@@ -467,35 +551,36 @@ export default function WeatherScreen() {
 				"Unit": "%",
 				"Rain Probability": weather!.rainChance.toFixed(1) + " %",
 				"Snow Probability": weather!.snowChance.toFixed(1) + " %",
+				"Historical Occurrence": `${((weatherList.filter(w => (w.rainChance + w.snowChance) > 50).length / weatherList.length) * 100).toFixed(1)}% of years had >50% precipitation chance`,
 				"Description": "Precipitation probability is the sum of rain and snow chances"
 			}
 		},
 		{
 			key: "Precipitation Amount",
 			value: convertPrecipitation(weather!.precipitation),
+			probability: showProbabilities ? `${calculateProbability("Precipitation Amount", useMiles ? 0.5 : 10)} above ${useMiles ? '0.5 in' : '10 mm'}` : undefined,
 			details: {
-				"Unit": useMiles ? "in" : "mm"
+				"Unit": useMiles ? "in" : "mm",
+				"Total Observed": `${(weatherList.reduce((sum, w) => sum + (useMiles ? w.precipitation * 0.03937 : w.precipitation), 0)).toFixed(1)} ${useMiles ? 'in' : 'mm'} across all years`,
+				"Data Source": "NASA POWER Project"
 			},
 		},
 		{
 			key: "Wind Speed",
 			value: convertWindSpeed(weather!.wind),
+			probability: showProbabilities ? `${calculateProbability("Wind Speed", useMiles ? 15 : 6.7)} above ${useMiles ? '15 mph' : '6.7 m/s'}` : undefined,
 			details: {
 				"Unit": useMiles ? "mph" : "m/s",
+				"Max Observed": `${convertWindSpeed(Math.max(...weatherList.map(w => w.wind)))} ${useMiles ? 'mph' : 'm/s'}`,
 			}
 		},
-		// {
-		// 	key: "Air Quality",
-		// 	value: weather!.airQuality,
-		// 	details: {
-		// 		"Description": "Based on AQI classification"
-		// 	}
-		// },
 		{
 			key: "UV Index",
 			value: weather!.uvIndex,
 			details: {
-				"Range": "0-11+"
+				"Range": "0-11+",
+				"Max Observed": `${Math.max(...weatherList.map(w => w.uvIndex)).toFixed(1)}`,
+				"Protection Needed": weather!.uvIndex > 6 ? "High - Use sun protection" : "Moderate - Limited protection needed"
 			}
 		},
 		{
@@ -503,14 +588,15 @@ export default function WeatherScreen() {
 			value: convertHumidity(weather!.humidity),
 			details: {
 				"Unit": useDewPoint ? (useFahrenheit ? "°F" : "°C") : "%",
-				"Description": "Dew point temperature is calculated from humidity and air temperature"
+				"Description": useDewPoint ? "Dew point calculated from humidity and temperature using Magnus formula" : "Relative humidity from NASA climate data"
 			},
 		},
 		{
 			key: "Cloud Cover",
 			value: weather!.cloudCover.toFixed(1),
 			details: {
-				"Unit": "%"
+				"Unit": "%",
+				"Clear Days": `${((weatherList.filter(w => w.cloudCover < 30).length / weatherList.length) * 100).toFixed(1)}% of years had <30% cloud cover`
 			}
 		},
 	];
@@ -660,28 +746,6 @@ export default function WeatherScreen() {
 							},
 						],
 					};
-				// case "Air Quality":
-				// 	return {
-				// 		labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
-				// 		datasets: [
-				// 			{
-				// 				data: weatherList.map(w => {
-				// 					const v = w.airQuality;
-				// 					if (typeof v === "number") return v;
-				// 					switch (v) {
-				// 						case "優": return 1;
-				// 						case "良": return 2;
-				// 						case "普通": return 3;
-				// 						case "差": return 4;
-				// 						case "非常差": return 5;
-				// 						default: return 0;
-				// 					}
-				// 				}),
-				// 				color: () => "#32CD32",
-				// 				strokeWidth: 2,
-				// 			},
-				// 		],
-				// 	};
 				case "UV Index":
 					return {
 						labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
@@ -728,8 +792,6 @@ export default function WeatherScreen() {
 					return useMiles ? "in" : "mm";
 				case "Wind Speed":
 					return useMiles ? "mph" : "m/s";
-				// case "Air Quality":
-				// 	return "";
 				case "UV Index":
 					return "";
 				case "Humidity":
@@ -750,10 +812,17 @@ export default function WeatherScreen() {
 						</Animated.View>
 					</Pressable>
 
-					<Text style={styles.rowText}>
-						{item.key}: {typeof item.value === "number" ? item.value.toFixed(1) : item.value}
-						{item.details["Unit"] ? ` ${item.details["Unit"]}` : ""}
-					</Text>
+					<View style={{ flex: 1 }}>
+						<Text style={styles.rowText}>
+							{item.key}: {typeof item.value === "number" ? item.value.toFixed(1) : item.value}
+							{item.details["Unit"] ? ` ${item.details["Unit"]}` : ""}
+						</Text>
+						{item.probability && (
+							<Text style={styles.probabilityText}>
+								Probability: {item.probability}
+							</Text>
+						)}
+					</View>
 				</View>
 
 				{isExpanded && item.details && Object.keys(item.details).length > 0 && (
@@ -765,7 +834,7 @@ export default function WeatherScreen() {
 						))}
 						{showLineChart(item.key) && (
 							<View style={{ marginTop: 10, marginBottom: 5 }}>
-								<Text style={{ fontSize: 15, marginBottom: 5 }}>
+								<Text style={{ fontSize: 15, marginBottom: 5, fontWeight: '600' }}>
 									Yearly same-day {item.key} variation
 								</Text>
 								<LineChart
@@ -790,7 +859,7 @@ export default function WeatherScreen() {
 						)}
 						{showDistChart(item.key) && (
 							<View style={{ marginTop: 10, marginBottom: 5 }}>
-								<Text style={{ fontSize: 15, marginBottom: 5 }}>
+								<Text style={{ fontSize: 15, marginBottom: 5, fontWeight: '600' }}>
 									{item.key} Distribution Chart
 								</Text>
 								<BarChart
@@ -834,7 +903,7 @@ export default function WeatherScreen() {
 			inputRange: [0, 1],
 			outputRange: [btnPanelHeight, 0],
 		});
-		
+
 		return (
 			<Animated.View
 				style={[
@@ -855,45 +924,40 @@ export default function WeatherScreen() {
 					<Switch value={useDewPoint} onValueChange={setUseDewPoint} />
 				</View>
 				<View style={styles.settingRow}>
-					<Text>Use Imperial</Text>
+					<Text>Use Imperial Units</Text>
 					<Switch value={useMiles} onValueChange={setUseMiles} />
 				</View>
-				<View>
-					<Text style={{ fontSize: 14, fontWeight: "500", color: "#0D47A1", marginBottom: 6 }}>
-						Highlight day (from {startDate} to {endDate})
-					</Text>
-					<View style={{ borderWidth: 1, borderColor: "#90CAF9", borderRadius: 8, overflow: "hidden", marginBottom: 6 }}>
-						<Picker
-							selectedValue={highlightMetric}
-							onValueChange={(val) => setHighlightMetric(val as HighlightMetric)}
-							style={{
-								color: "#0D47A1",
-								paddingVertical: 10,
-								paddingHorizontal: 10,
-								backgroundColor: "#fff",
-							}}
-							dropdownIconColor="#0D47A1"
-						>
-							{highlightOptions.map(([label, value]) => (
-							<Picker.Item key={value} label={label} value={value} />
-							))}
-						</Picker>
-					</View>
+				<View style={styles.settingRow}>
+					<Text>Show Probabilities</Text>
+					<Switch value={showProbabilities} onValueChange={setShowProbabilities} />
 				</View>
+				{startDate && endDate && (
+					<View>
+						<Text style={{ fontSize: 14, fontWeight: "500", color: "#0D47A1", marginBottom: 6 }}>
+							Highlight day (from {startDate} to {endDate})
+						</Text>
+						<View style={{ borderWidth: 1, borderColor: "#90CAF9", borderRadius: 8, overflow: "hidden", marginBottom: 6 }}>
+							<Picker
+								selectedValue={highlightMetric}
+								onValueChange={(val) => setHighlightMetric(val as HighlightMetric)}
+								style={{
+									color: "#0D47A1",
+									paddingVertical: 10,
+									paddingHorizontal: 10,
+									backgroundColor: "#fff",
+								}}
+								dropdownIconColor="#0D47A1"
+							>
+								{highlightOptions.map(([label, value]) => (
+									<Picker.Item key={value} label={label} value={value} />
+								))}
+							</Picker>
+						</View>
+					</View>
+				)}
 			</Animated.View>
 		);
 	};
-
-	// const chartData = {
-	// 	labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
-	// 	datasets: [
-	// 		{
-	// 			data: weatherList.map(w => useFahrenheit ? w.temp * 1.8 + 32 : w.temp),
-	// 			color: () => "#007AFF",
-	// 			strokeWidth: 2,
-	// 		},
-	// 	],
-	// };
 
 	const btnBottom = settingsAnim.interpolate({
 		inputRange: [0, 1],
@@ -907,7 +971,7 @@ export default function WeatherScreen() {
 					style={styles.shareBtn}
 					onPress={Platform.OS === "web" ? downloadJsonWeb : shareAsJson}
 				>
-					<Text style={styles.shareText}>Get JSON</Text>
+					<Text style={styles.shareText}>Export JSON</Text>
 				</TouchableOpacity>
 				<TouchableOpacity
 					style={styles.shareBtn}
@@ -921,19 +985,24 @@ export default function WeatherScreen() {
 				{Platform.OS === "web" ? (
 					<div style={{ overflow: "auto", height: "100vh", padding: 10 }}>
 						<View id="weather-container">
-							<View style={{ marginBottom: 10 }}>
+							<View style={{ marginBottom: 10, padding: 12, backgroundColor: '#E3F2FD', borderRadius: 12 }}>
 								<Text style={{ fontSize: 20, fontWeight: "bold", color: "#0D47A1", marginBottom: 4 }}>
 									Weather Data for <Text style={{ color: "#1976D2" }}>{targetDate}</Text>
 								</Text>
-								<Text style={{ fontSize: 14, color: "#1976D2", marginBottom: 4 }}>
-									  (Showing {
-											highlightOptions.find(([_, value]) => value === highlightMetric)?.[0] 
-											|| highlightMetric
-										} day within {startDate} – {endDate})
-								</Text>
+								{startDate && endDate && (
+									<Text style={{ fontSize: 14, color: "#1976D2", marginBottom: 4 }}>
+										(Showing {
+										highlightOptions.find(([_, value]) => value === highlightMetric)?.[0]
+										|| highlightMetric
+									} day within {startDate} — {endDate})
+									</Text>
+								)}
 								<Text style={{ fontSize: 14, color: "#0D47A1" }}>
 									{location ? `Location: ${location}\n` : ""}
 									Latitude: {targetLatitude}, Longitude: {targetLongitude}
+								</Text>
+								<Text style={{ fontSize: 12, color: "#666", marginTop: 6, fontStyle: 'italic' }}>
+									Data based on {weatherList.length} years of NASA Earth observations
 								</Text>
 							</View>
 							{rows.map((item) => renderRow(item))}
@@ -948,26 +1017,37 @@ export default function WeatherScreen() {
 						<View
 							id="weather-container"
 							style={{
-							padding: 12,
-							borderRadius: 12,
-							backgroundColor: "#E3F2FD",
-							shadowColor: "#000",
-							shadowOffset: { width: 0, height: 2 },
-							shadowOpacity: 0.1,
-							shadowRadius: 4,
-							elevation: 3,
-							marginBottom: 10,
+								padding: 12,
+								borderRadius: 12,
+								backgroundColor: "#E3F2FD",
+								shadowColor: "#000",
+								shadowOffset: { width: 0, height: 2 },
+								shadowOpacity: 0.1,
+								shadowRadius: 4,
+								elevation: 3,
+								marginBottom: 10,
 							}}
 						>
 							<Text style={{ fontSize: 20, fontWeight: "bold", color: "#0D47A1", marginBottom: 4 }}>
 								Weather Data for <Text style={{ color: "#1976D2" }}>{targetDate}</Text>
 							</Text>
+							{startDate && endDate && (
+								<Text style={{ fontSize: 14, color: "#1976D2", marginBottom: 4 }}>
+									(Showing {
+									highlightOptions.find(([_, value]) => value === highlightMetric)?.[0]
+									|| highlightMetric
+								} day)
+								</Text>
+							)}
 							<Text style={{ fontSize: 14, color: "#0D47A1" }}>
 								Latitude: {Number(targetLatitude).toFixed(3)}, Longitude: {Number(targetLongitude).toFixed(3)}
 								{location ? `\nLocation: ${location}` : ""}
 							</Text>
+							<Text style={{ fontSize: 12, color: "#666", marginTop: 6, fontStyle: 'italic' }}>
+								Based on {weatherList.length} years of NASA data
+							</Text>
 						</View>
-							{rows.map((item) => renderRow(item))}
+						{rows.map((item) => renderRow(item))}
 						<View style={{ height: settingsVisible ? btnPanelHeight + 20 : btnHeight + 20 }} />
 					</ScrollView>
 				)}
@@ -1012,6 +1092,14 @@ const styles = StyleSheet.create({
 	rowText: {
 		fontSize: 16,
 		marginLeft: 5,
+		fontWeight: '500',
+	},
+	probabilityText: {
+		fontSize: 13,
+		marginLeft: 5,
+		marginTop: 4,
+		color: "#0D47A1",
+		fontStyle: 'italic',
 	},
 	iconTouch: {
 		width: 44,
@@ -1057,6 +1145,7 @@ const styles = StyleSheet.create({
 		right: 0,
 		backgroundColor: "#fff",
 		paddingHorizontal: 20,
+		paddingTop: 10,
 		borderTopWidth: 1,
 		borderTopColor: "#ddd",
 		overflow: "hidden",
