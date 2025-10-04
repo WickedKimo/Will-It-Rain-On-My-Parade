@@ -18,6 +18,7 @@ import {
 import { BarChart, LineChart } from "react-native-chart-kit";
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
 import * as FileSystem from "expo-file-system";
 import { useRouter } from "expo-router";
@@ -70,6 +71,9 @@ const highlightOptions: [string, HighlightMetric][] = [
   ["Cloudiest Day", "cloudiest"],
   ["Clearest Day", "clearest"],
 ];
+
+const btnPanelHeight = Platform.OS === "web" ? 270 : 210;
+const btnHeight = Platform.OS === "web" ? 80 : 20;
 
 function getMonthDay(dateStr: string) {
 	const d = dateStr.replace("_", "-").replace(/\//g, "-").split("-");
@@ -128,6 +132,24 @@ function replaceMonthDayInDate(originalDate: string, newMonthDay: string) {
 	const [year] = originalDate.split("-");
 	return `${year}-${newMonthDay}`;
 }
+
+const savePreference = async (key: string, value: any) => {
+	try {
+		await AsyncStorage.setItem(key, JSON.stringify(value));
+	} catch (e) {
+		console.error("Error saving preference", e);
+	}
+};
+
+const loadPreference = async (key: string, defaultValue: any) => {
+	try {
+		const value = await AsyncStorage.getItem(key);
+		return value !== null ? JSON.parse(value) : defaultValue;
+	} catch (e) {
+		console.error("Error loading preference", e);
+		return defaultValue;
+	}
+};
 
 type RowItem = {
 	key: string;
@@ -192,6 +214,18 @@ export default function WeatherScreen() {
 	const [useDewPoint, setUseDewPoint] = useState(false);
 	const [useMiles, setUseMiles] = useState(false);
 	const [highlightMetric, setHighlightMetric] = useState<HighlightMetric>("hottest");
+
+	useEffect(() => {
+		loadPreference("useFahrenheit", false).then(setUseFahrenheit);
+		loadPreference("useDewPoint", false).then(setUseDewPoint);
+		loadPreference("useMiles", false).then(setUseMiles);
+		loadPreference("highlightMetric", "hottest").then(setHighlightMetric);
+	}, []);
+
+	useEffect(() => { savePreference("useFahrenheit", useFahrenheit); }, [useFahrenheit]);
+	useEffect(() => { savePreference("useDewPoint", useDewPoint); }, [useDewPoint]);
+	useEffect(() => { savePreference("useMiles", useMiles); }, [useMiles]);
+	useEffect(() => { savePreference("highlightMetric", highlightMetric); }, [highlightMetric]);
 
 	// Bottom settings panel
 	const [settingsVisible, setSettingsVisible] = useState(false);
@@ -311,13 +345,15 @@ export default function WeatherScreen() {
 	function magnusDewPoint(tempC: number, humidity: number) {
 		const a = 17.27;
 		const b = 237.7;
-		const alpha = ((a * tempC) / (b + tempC)) + Math.log(humidity + 0.001 / 100);
+		const safe_humidity = Math.min(Math.max(humidity, 1), 100);
+		const alpha = ((a * tempC) / (b + tempC)) + Math.log(safe_humidity / 100);
 		return (b * alpha) / (a - alpha);
 	}
 
 	const convertTemp = (val: number) => (useFahrenheit ? val * 1.8 + 32 : val).toFixed(1);
 	const convertPrecipitation = (val: number) => (useMiles ? val * 0.03937 : val).toFixed(1);
-	const convertHumidity = (val: number) => (useDewPoint ? magnusDewPoint(weather!.temp, val) : val).toFixed(1);
+	const convertWindSpeed = (val: number) => (useMiles ? val * 1.09361 : val).toFixed(1);
+	const convertHumidity = (val: number) => (useDewPoint ? Number(convertTemp(magnusDewPoint(weather!.temp, val))) : val).toFixed(1);
 
 	const rows: RowItem[] = [
 		{
@@ -343,14 +379,14 @@ export default function WeatherScreen() {
 			key: "Precipitation Amount",
 			value: convertPrecipitation(weather!.precipitation),
 			details: {
-				"Unit": useMiles ? "in" : "mm"
+				"Unit": useMiles ? "inch" : "mm"
 			},
 		},
 		{
 			key: "Wind Speed",
-			value: weather!.wind,
+			value: convertWindSpeed(weather!.wind),
 			details: {
-				"Unit": "m/s",
+				"Unit": useMiles ? "yard/s" : "m/s",
 			}
 		},
 		// {
@@ -368,10 +404,10 @@ export default function WeatherScreen() {
 			}
 		},
 		{
-			key: "Humidity",
+			key: useDewPoint ? "Dew Point" : "Humidity",
 			value: convertHumidity(weather!.humidity),
 			details: {
-				"Unit": useDewPoint ? "°C" : "%",
+				"Unit": useDewPoint ? (useFahrenheit ? "°F" : "°C") : "%",
 				"Description": "Dew point temperature is calculated from humidity and air temperature"
 			},
 		},
@@ -771,11 +807,11 @@ export default function WeatherScreen() {
 					<Switch value={useFahrenheit} onValueChange={setUseFahrenheit} />
 				</View>
 				<View style={styles.settingRow}>
-					<Text>Show Dew Point</Text>
+					<Text>Use Dew Point</Text>
 					<Switch value={useDewPoint} onValueChange={setUseDewPoint} />
 				</View>
 				<View style={styles.settingRow}>
-					<Text>Use Inches</Text>
+					<Text>Use Imperial</Text>
 					<Switch value={useMiles} onValueChange={setUseMiles} />
 				</View>
 				<View>
@@ -815,8 +851,6 @@ export default function WeatherScreen() {
 		],
 	};
 
-	const btnPanelHeight = Platform.OS === "web" ? 270 : 210;
-	const btnHeight = Platform.OS === "web" ? 80 : 20;
 	const btnBottom = settingsAnim.interpolate({
 		inputRange: [0, 1],
 		outputRange: [btnHeight, btnPanelHeight],
