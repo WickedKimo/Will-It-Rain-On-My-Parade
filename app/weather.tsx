@@ -21,7 +21,6 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
 import * as FileSystem from "expo-file-system";
-import { useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import React from "react";
 import { captureRef } from "react-native-view-shot";
@@ -158,8 +157,117 @@ type RowItem = {
 };
 
 export default function WeatherScreen() {
+	function steadmanApparentTemp(tempC: number, humidity: number, wind: number) {
+		const e = (humidity / 100) * 6.105 * Math.exp((17.27 * tempC) / (237.7 + tempC));
+		return 1.04 * tempC + 0.2 * e - 0.65 * wind - 2.7;
+	}
+
+	function magnusDewPoint(tempC: number, humidity: number) {
+		const a = 17.27;
+		const b = 237.7;
+		const safe_humidity = Math.min(Math.max(humidity, 1), 100);
+		const alpha = ((a * tempC) / (b + tempC)) + Math.log(safe_humidity / 100);
+		return (b * alpha) / (a - alpha);
+	}
+
+	async function shareAsJson() {
+		if (!weather) return;
+		const fileUri = (FileSystem as any).cacheDirectory + `weather_${targetLatitude}_${targetLongitude}_${targetDate}.json`;
+		await FileSystem.writeAsStringAsync(fileUri, JSON.stringify(weather, null, 2));
+		if (await Sharing.isAvailableAsync()) {
+			await Sharing.shareAsync(fileUri);
+		} else {
+			alert("Sharing not available on this platform.");
+		}
+	}
+
+	async function shareScreenshot() {
+		try {
+			const uri = await captureRef(screenRef, { format: "png", quality: 0.9 });
+			if (await Sharing.isAvailableAsync()) {
+				await Sharing.shareAsync(uri);
+			} else {
+				alert("Sharing not available on this platform.");
+			}
+		} catch (err) {
+			console.error("Screenshot failed", err);
+		}
+	}
+
+	function downloadJsonWeb() {
+		if (!weather) return;
+
+		const adjusted: any = {
+			temperature: Number(convertTemp(weather.temp)),
+			temperature_unit: useFahrenheit ? "°F" : "°C",
+
+			rainChance: Number(weather.rainChance),
+			rainChance_unit: "%",
+
+			snowChance: Number(weather.snowChance),
+			snowChance_unit: "%",
+
+			precipitation: Number(convertPrecipitation(weather.precipitation)),
+			precipitation_unit: useMiles ? "in" : "mm",
+
+			wind: Number(convertWindSpeed(weather.wind)),
+			wind_unit: useMiles ? "mph" : "m/s",
+
+			uvIndex: Number(weather.uvIndex),
+			uvIndex_unit: "index",
+
+			humidity: Number(convertHumidity(weather.humidity)),
+			humidity_unit: useDewPoint ? (useFahrenheit ? "°F" : "°C") : "%",
+		};
+
+		if (useDewPoint) {
+			adjusted.dewPoint = Number(convertHumidity(weather.humidity));
+			adjusted.dewPoint_unit = useFahrenheit ? "°F" : "°C";
+			delete adjusted.humidity;
+			delete adjusted.humidity_unit;
+		} else {
+			adjusted.humidity = Number(weather.humidity);
+			adjusted.humidity_unit = "%";
+		}
+
+		adjusted.cloudCover = Number(weather.cloudCover),
+		adjusted.cloudCover_unit = "%"
+		
+		const blob = new Blob([JSON.stringify(adjusted, null, 2)], {
+			type: "application/json",
+		});
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement("a");
+		a.href = url;
+		a.download = `weather_${targetLatitude}_${targetLongitude}_${targetDate}.json`;
+		a.click();
+		URL.revokeObjectURL(url);
+	}
+
+	async function downloadScreenshotWeb() {
+		alert("Please use the web browser's built-in screenshot function (e.g. Print to PDF) to capture the content.");
+		// if (Platform.OS !== "web") return;
+		//     try {
+		//         const element = document.querySelector("#weather-container") as HTMLElement;
+		//         if (!element) return;
+
+		//         const canvas = await html2canvas(element);
+		//         const dataUrl = canvas.toDataURL("image/png");
+
+		//         const a = document.createElement("a");
+		//         a.href = dataUrl;
+		//         a.download = `weather_${targetLatitude}_${targetLongitude}_${targetDate}.png`;
+		//         a.click();
+		//     } catch (err) {
+		//         console.error("Web screenshot failed", err);
+		//     }
+	}
+
+	//	--------------------	--------------------	--------------------
+	//	--------------------   Main logic starts here   --------------------
+	//	--------------------	--------------------	--------------------
 	const params = useLocalSearchParams();
-	const router = useRouter();
+	// const router = useRouter();
 	const insets = useSafeAreaInsets();
 
 	const {
@@ -337,22 +445,9 @@ export default function WeatherScreen() {
 
 	if (loading) return <ActivityIndicator style={{ flex: 1 }} />;
 
-	function steadmanApparentTemp(tempC: number, humidity: number, wind: number) {
-		const e = (humidity / 100) * 6.105 * Math.exp((17.27 * tempC) / (237.7 + tempC));
-		return 1.04 * tempC + 0.2 * e - 0.65 * wind - 2.7;
-	}
-
-	function magnusDewPoint(tempC: number, humidity: number) {
-		const a = 17.27;
-		const b = 237.7;
-		const safe_humidity = Math.min(Math.max(humidity, 1), 100);
-		const alpha = ((a * tempC) / (b + tempC)) + Math.log(safe_humidity / 100);
-		return (b * alpha) / (a - alpha);
-	}
-
 	const convertTemp = (val: number) => (useFahrenheit ? val * 1.8 + 32 : val).toFixed(1);
 	const convertPrecipitation = (val: number) => (useMiles ? val * 0.03937 : val).toFixed(1);
-	const convertWindSpeed = (val: number) => (useMiles ? val * 1.09361 : val).toFixed(1);
+	const convertWindSpeed = (val: number) => (useMiles ? val * 2.23694 : val).toFixed(1);
 	const convertHumidity = (val: number) => (useDewPoint ? Number(convertTemp(magnusDewPoint(weather!.temp, val))) : val).toFixed(1);
 
 	const rows: RowItem[] = [
@@ -370,8 +465,8 @@ export default function WeatherScreen() {
 			value: weather!.rainChance + weather!.snowChance,
 			details: {
 				"Unit": "%",
-				"Rain Probability": weather!.rainChance + " %",
-				"Snow Probability": weather!.snowChance + " %",
+				"Rain Probability": weather!.rainChance.toFixed(1) + " %",
+				"Snow Probability": weather!.snowChance.toFixed(1) + " %",
 				"Description": "Precipitation probability is the sum of rain and snow chances"
 			}
 		},
@@ -379,14 +474,14 @@ export default function WeatherScreen() {
 			key: "Precipitation Amount",
 			value: convertPrecipitation(weather!.precipitation),
 			details: {
-				"Unit": useMiles ? "inch" : "mm"
+				"Unit": useMiles ? "in" : "mm"
 			},
 		},
 		{
 			key: "Wind Speed",
 			value: convertWindSpeed(weather!.wind),
 			details: {
-				"Unit": useMiles ? "yard/s" : "m/s",
+				"Unit": useMiles ? "mph" : "m/s",
 			}
 		},
 		// {
@@ -413,7 +508,7 @@ export default function WeatherScreen() {
 		},
 		{
 			key: "Cloud Cover",
-			value: weather!.cloudCover,
+			value: weather!.cloudCover.toFixed(1),
 			details: {
 				"Unit": "%"
 			}
@@ -435,59 +530,6 @@ export default function WeatherScreen() {
 		});
 	};
 
-	async function shareAsJson() {
-		if (!weather) return;
-		const fileUri = (FileSystem as any).cacheDirectory + `weather_${targetLatitude}_${targetLongitude}_${targetDate}.json`;
-		await FileSystem.writeAsStringAsync(fileUri, JSON.stringify(weather, null, 2));
-		if (await Sharing.isAvailableAsync()) {
-			await Sharing.shareAsync(fileUri);
-		} else {
-			alert("Sharing not available on this platform.");
-		}
-	}
-
-	async function shareScreenshot() {
-		try {
-			const uri = await captureRef(screenRef, { format: "png", quality: 0.9 });
-			if (await Sharing.isAvailableAsync()) {
-				await Sharing.shareAsync(uri);
-			} else {
-				alert("Sharing not available on this platform.");
-			}
-		} catch (err) {
-			console.error("Screenshot failed", err);
-		}
-	}
-
-	function downloadJsonWeb() {
-		if (!weather) return;
-		const blob = new Blob([JSON.stringify(weather, null, 2)], { type: "application/json" });
-		const url = URL.createObjectURL(blob);
-		const a = document.createElement("a");
-		a.href = url;
-		a.download = `weather_${targetLatitude}_${targetLongitude}_${targetDate}.json`;
-		a.click();
-		URL.revokeObjectURL(url);
-	}
-
-	async function downloadScreenshotWeb() {
-		alert("Please use the web browser's built-in screenshot function (e.g. Print to PDF) to capture the content.");
-		// if (Platform.OS !== "web") return;
-		//     try {
-		//         const element = document.querySelector("#weather-container") as HTMLElement;
-		//         if (!element) return;
-
-		//         const canvas = await html2canvas(element);
-		//         const dataUrl = canvas.toDataURL("image/png");
-
-		//         const a = document.createElement("a");
-		//         a.href = dataUrl;
-		//         a.download = `weather_${targetLatitude}_${targetLongitude}_${targetDate}.png`;
-		//         a.click();
-		//     } catch (err) {
-		//         console.error("Web screenshot failed", err);
-		//     }
-	}
 
 	const chartWidth = Math.min(
 		Platform.OS === "web"
@@ -538,7 +580,7 @@ export default function WeatherScreen() {
 				case "Wind Speed":
 					values = weatherList.map(w => w.wind).filter(v => !isNaN(v));
 					binWidth = 1;
-					unit = "m/s";
+					unit = useMiles ? "mph" : "m/s";
 					break;
 				case "UV Index":
 					values = weatherList.map(w => w.uvIndex).filter(v => !isNaN(v));
@@ -548,7 +590,7 @@ export default function WeatherScreen() {
 				case "Humidity":
 					values = weatherList.map(w => useDewPoint ? magnusDewPoint(w.temp, w.humidity) : w.humidity).filter(v => !isNaN(v));
 					binWidth = useDewPoint ? 4 : 5;
-					unit = useDewPoint ? "°C" : "%";
+					unit = useDewPoint ? (useFahrenheit ? "°F" : "°C") : "%";
 					break;
 				case "Cloud Cover":
 					values = weatherList.map(w => w.cloudCover).filter(v => !isNaN(v));
@@ -680,10 +722,12 @@ export default function WeatherScreen() {
 
 		const getYAxisSuffix = (key: string) => {
 			switch (key) {
+				case "Temperature":
+					return useFahrenheit ? "°F" : "°C";
 				case "Precipitation Amount":
 					return useMiles ? "in" : "mm";
 				case "Wind Speed":
-					return "m/s";
+					return useMiles ? "mph" : "m/s";
 				// case "Air Quality":
 				// 	return "";
 				case "UV Index":
@@ -840,16 +884,16 @@ export default function WeatherScreen() {
 		);
 	};
 
-	const chartData = {
-		labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
-		datasets: [
-			{
-				data: weatherList.map(w => useFahrenheit ? w.temp * 1.8 + 32 : w.temp),
-				color: () => "#007AFF",
-				strokeWidth: 2,
-			},
-		],
-	};
+	// const chartData = {
+	// 	labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
+	// 	datasets: [
+	// 		{
+	// 			data: weatherList.map(w => useFahrenheit ? w.temp * 1.8 + 32 : w.temp),
+	// 			color: () => "#007AFF",
+	// 			strokeWidth: 2,
+	// 		},
+	// 	],
+	// };
 
 	const btnBottom = settingsAnim.interpolate({
 		inputRange: [0, 1],
