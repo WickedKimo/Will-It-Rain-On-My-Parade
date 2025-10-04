@@ -41,3 +41,8 @@ app-example
 # generated native folders
 /ios
 /android
+
+.venv
+
+# Ignore generated weather JSON files
+*_*.json
