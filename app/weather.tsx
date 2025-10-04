@@ -164,7 +164,7 @@ export default function WeatherScreen() {
 	const [weatherData, setWeatherData] = useState<Record<string, WeatherData>>({});
 	useEffect(() => {
 		const callPython = async () => {
-			const response = await fetch("http://localhost:5000/getWeather", {
+			const response = await fetch("https://will-it-rain-on-my-parade-ecc0.onrender.com/getWeather", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
