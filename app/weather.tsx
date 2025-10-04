@@ -1,7 +1,11 @@
 // app/weather.tsx - Optimized for performance with back navigation
 import { AntDesign, Ionicons } from "@expo/vector-icons";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Picker } from '@react-native-picker/picker';
+import * as FileSystem from "expo-file-system";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import * as Sharing from "expo-sharing";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	ActivityIndicator,
 	Animated,
@@ -15,13 +19,8 @@ import {
 	TouchableOpacity,
 	View
 } from "react-native";
-import { BarChart, LineChart } from "react-native-chart-kit";
+import { LineChart } from "react-native-chart-kit";
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Picker } from '@react-native-picker/picker';
-import * as FileSystem from "expo-file-system";
-import * as Sharing from "expo-sharing";
-import React from "react";
 import { captureRef } from "react-native-view-shot";
 
 type WeatherData = {
@@ -295,20 +294,55 @@ export default function WeatherScreen() {
 	}, []);
 
 	const downloadJsonWeb = useCallback(() => {
-		if (!weather || !weatherList.length) return;
+		if (!weather) return;
 
-		const metadata = {
+		const metadata: any = {
 			query_info: {
 				location: location || `${targetLatitude}, ${targetLongitude}`,
+				latitude: Number(targetLatitude),
+				longitude: Number(targetLongitude),
+				query_date: targetDate,
+				date_mode: dateMode,
+				start_date: startDate,
+				end_date: endDate,
+				is_area_query: params.isArea === 'true',
 				generated_at: new Date().toISOString()
 			},
-			data_source: "NASA Earth Observations",
+			data_source: {
+				provider: "NASA Earth Observations",
+				years_analyzed: weatherList.map(w => w.date?.split('-')[0]).filter((v, i, a) => a.indexOf(v) === i).join(', '),
+				total_data_points: weatherList.length
+			},
 			summary: {
 				temperature: Number(convertTemp(weather.temp)),
-				precipitation_probability: Number((weather.rainChance + weather.snowChance).toFixed(1))
+				rainChance: Number(weather.rainChance.toFixed(1)),
+				snowChance: Number(weather.snowChance.toFixed(1)),
+				precipitation: Number(convertPrecipitation(weather.precipitation)),
+				wind: Number(convertWindSpeed(weather.wind)),
+				uvIndex: Number(weather.uvIndex),
+				humidity: Number(convertHumidity(weather.humidity)),
+			},
+			unit: {
+				temperature_unit: useFahrenheit ? "°F" : "°C",
+				rainChance_unit: "%",
+				snowChance_unit: "%",
+				precipitation_unit: useMiles ? "in" : "mm",
+				wind_unit: useMiles ? "mph" : "m/s",
+				uvIndex_unit: "index",
 			}
 		};
 
+		if (useDewPoint) {
+			metadata.summary.dewPoint = Number(convertHumidity(weather.humidity));
+			metadata.unit.dewPoint_unit = useFahrenheit ? "°F" : "°C";
+		} else {
+			metadata.summary.humidity = Number(weather.humidity);
+			metadata.unit.humidity_unit = "%";
+		}
+
+		metadata.summary.cloudCover = Number(weather.cloudCover),
+		metadata.unit.cloudCover_unit = "%"
+		
 		const blob = new Blob([JSON.stringify(metadata, null, 2)], {
 			type: "application/json",
 		});
@@ -318,7 +352,19 @@ export default function WeatherScreen() {
 		a.download = `nasa_weather_${targetLatitude}_${targetLongitude}_${targetDate}.json`;
 		a.click();
 		URL.revokeObjectURL(url);
-	}, [weather, weatherList, location, targetLatitude, targetLongitude, targetDate, convertTemp]);
+	}, [
+		weather,
+		weatherList,
+		location,
+		targetLatitude,
+		targetLongitude,
+		targetDate,
+		dateMode,
+		params.isArea,
+		useFahrenheit,
+		useMiles,
+		useDewPoint
+	]);
 
 	const downloadScreenshotWeb = useCallback(async () => {
 		alert("Please use the web browser's built-in screenshot function (e.g. Print to PDF) to capture the content.");
