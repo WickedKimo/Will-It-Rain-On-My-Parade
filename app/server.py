@@ -1,8 +1,11 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import json
-from datetime import datetime, timedelta
-import random
+import os
+import glob
+from datetime import date
+import numpy as np
+import pandas as pd
 
 NASA_DATA_ROOT = "C:/User/users/Desktop/NASA/merged/"
 app = Flask(__name__)
@@ -223,19 +226,18 @@ def get_weather():
         start_date = or_date
         end_date = or_date
 
-    ## TODO: Replace with real data fetching logic
-    # if latitude is None or longitude is None:
-    #     return jsonify({"error": "Missing latitude or longitude"}), 400
+    output_obj = {}
 
     for date in (start_date, end_date):
         month, day = map(int, date.split("-")[1:])
         weather = get_25y_weather_data(lat_q, lon_q, month, day, NASA_DATA_ROOT)
 
-        filename = f"{lat_q}_{lon_q}_{date}.json"
-        with open(filename, "w") as f:
-            json.dump(weather, f, indent=2)
+        if date in output_obj:
+            output_obj[date].update(weather)
+        else:
+            output_obj[date] = weather
 
-    return jsonify(weather)
+    return jsonify(output_obj)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
