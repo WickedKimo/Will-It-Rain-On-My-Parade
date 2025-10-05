@@ -399,7 +399,19 @@ export default function WeatherScreen() {
 					endDate: endDate
 				}),
 			});
-			setWeatherData(await response.json());
+			let res = await response.json();
+			res.temp = res.temp_c;
+			delete res.temp_c;
+			res.precipitation = res.total_precipitation;
+			delete res.total_precipitation;
+			res.wind = res.windspeed;
+			delete res.windspeed;
+			res.humidity = res.QSH;
+			delete res.QSH;
+			res.cloudCover = res.TAUTOT;
+			delete res.TAUTOT;
+			// setWeatherData(await response.json());
+			setWeatherData(res);
 		};
 		callPython();
 	}, [date, targetLatitude, targetLongitude, startDate, endDate]);
