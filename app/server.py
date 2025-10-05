@@ -16,7 +16,7 @@ NASA_DATA_ROOT = "C:/User/users/Desktop/NASA/merged/"
 app = Flask(__name__)
 CORS(app)
 
-def get_25y_weather_data(lat_q: float, lon_q: float, month: int, day: int, root_dir: str):
+def get_25y_weather_data(lat_q: float, lon_q: float, month: int, day: int, date: str, root_dir: str):
     """
     從指定的根目錄中提取並處理指定座標和日期的25年氣象資料。
 
@@ -213,7 +213,7 @@ def get_25y_weather_data(lat_q: float, lon_q: float, month: int, day: int, root_
             # key = f"{lat_q:.4f}_{lon_q:.4f}_{date_str}"
 
             year = int(date_str.split("-")[0])
-            key = year
+            key = f"{lat_q}_{lon_q}_{date_str}"
             
             output_obj[key] = payload
 
@@ -243,17 +243,18 @@ def get_weather():
     ## TODO: Replace with real data fetching logic
     # if latitude is None or longitude is None:
     #     return jsonify({"error": "Missing latitude or longitude"}), 400
-
-    for date in (start_date, end_date):
+    all_weather = {}
+    for date in pd.date_range(start_date, end_date):
         month, day = map(int, date.split("-")[1:])
-        weather = get_25y_weather_data(lat_q, lon_q, month, day, NASA_DATA_ROOT)
+        weather = get_25y_weather_data(lat_q, lon_q, month, day, date, NASA_DATA_ROOT)
+        
+        all_weather.update(weather)
 
-        filename = f"{lat_q}_{lon_q}_{date}.json"
-        with open(filename, "w") as f:
-            json.dump(weather, f, indent=2)
+    filename = f"{lat_q}_{lon_q}_{date}.json"
+    with open(filename, "w") as f:
+        json.dump(weather, f, indent=2)
 
-    print(weather)
-    return jsonify(weather)
+    return jsonify(all_weather)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)

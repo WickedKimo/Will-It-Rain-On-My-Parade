@@ -140,7 +140,19 @@ export default function WeatherScreen() {
 					endDate: endDate
 				}),
 			});
-			setWeatherData(await response.json());
+			let res = await response.json();
+			res.temp = res.temp_c;
+			delete res.temp_c;
+			res.precipitation = res.total_precipitation;
+			delete res.total_precipitation;
+			res.wind = res.windspeed;
+			delete res.windspeed;
+			res.humidity = res.QSH;
+			delete res.QSH;
+			res.cloudCover = res.TAUTOT;
+			delete res.TAUTOT;
+			// setWeatherData(await response.json());
+			setWeatherData(res);
 		};
 
 		callPython();
@@ -185,16 +197,16 @@ export default function WeatherScreen() {
 
 			const dailyAvgs = Object.entries(grouped).map(([date, items]) => {
 				return {
-				date,
-				temp: avg(items.map(w => w.temp)),
-				rainChance: avg(items.map(w => w.rainChance)),
-				snowChance: avg(items.map(w => w.snowChance)),
-				precipitation: avg(items.map(w => w.precipitation)),
-				wind: avg(items.map(w => w.wind)),
-				// airQuality: items[0].airQuality,
-				uvIndex: avg(items.map(w => w.uvIndex)),
-				humidity: avg(items.map(w => w.humidity)),
-				cloudCover: avg(items.map(w => w.cloudCover)),
+					date,
+					temp: avg(items.map(w => w.temp)),
+					rainChance: avg(items.map(w => w.rainChance)),
+					snowChance: avg(items.map(w => w.snowChance)),
+					precipitation: avg(items.map(w => w.precipitation)),
+					wind: avg(items.map(w => w.wind)),
+					// airQuality: items[0].airQuality,
+					uvIndex: avg(items.map(w => w.uvIndex)),
+					humidity: avg(items.map(w => w.humidity)),
+					cloudCover: avg(items.map(w => w.cloudCover)),
 				} as WeatherData;
 			});
 
