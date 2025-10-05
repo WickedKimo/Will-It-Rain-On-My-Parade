@@ -213,7 +213,7 @@ def get_25y_weather_data(lat_q: float, lon_q: float, month: int, day: int, date:
             # key = f"{lat_q:.4f}_{lon_q:.4f}_{date_str}"
 
             year = int(date_str.split("-")[0])
-            key = f"{lat_q}_{lon_q}_{date_str}"
+            key = f"{lat_q:.3f}_{lon_q:.3f}_{date_str}"
             
             output_obj[key] = payload
 
@@ -240,19 +240,22 @@ def get_weather():
         start_date = or_date
         end_date = or_date
 
-    ## TODO: Replace with real data fetching logic
-    # if latitude is None or longitude is None:
-    #     return jsonify({"error": "Missing latitude or longitude"}), 400
     all_weather = {}
-    for date in pd.date_range(start_date, end_date):
-        month, day = map(int, date.split("-")[1:])
-        weather = get_25y_weather_data(lat_q, lon_q, month, day, date, NASA_DATA_ROOT)
+    
+    # 修正：使用 pd.date_range 正確處理日期
+    for current_date in pd.date_range(start_date, end_date):
+        # 從 Timestamp 物件取得月份和日期
+        month = current_date.month
+        day = current_date.day
+        date_str = current_date.strftime("%Y-%m-%d")
         
+        weather = get_25y_weather_data(lat_q, lon_q, month, day, date_str, NASA_DATA_ROOT)
         all_weather.update(weather)
 
-    filename = f"{lat_q}_{lon_q}_{date}.json"
+    # 可選：儲存檔案（用於除錯）
+    filename = f"{lat_q}_{lon_q}_{start_date}_to_{end_date}.json"
     with open(filename, "w") as f:
-        json.dump(weather, f, indent=2)
+        json.dump(all_weather, f, indent=2)
 
     return jsonify(all_weather)
 

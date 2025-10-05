@@ -29,10 +29,11 @@ type WeatherData = {
 	snowChance: number;
 	precipitation: number;
 	wind: number;
-	uvIndex: number;
+	// uvIndex: number;
 	humidity: number;
 	cloudCover: number;
 	date?: string;
+	snowfall?: number;
 };
 
 type HighlightMetric =
@@ -319,7 +320,7 @@ export default function WeatherScreen() {
 				snowChance: Number(weather.snowChance.toFixed(1)),
 				precipitation: Number(convertPrecipitation(weather.precipitation)),
 				wind: Number(convertWindSpeed(weather.wind)),
-				uvIndex: Number(weather.uvIndex),
+				// uvIndex: Number(weather.uvIndex),
 				humidity: Number(convertHumidity(weather.humidity)),
 			},
 			unit: {
@@ -328,7 +329,7 @@ export default function WeatherScreen() {
 				snowChance_unit: "%",
 				precipitation_unit: useMiles ? "in" : "mm",
 				wind_unit: useMiles ? "mph" : "m/s",
-				uvIndex_unit: "index",
+				// uvIndex_unit: "index",
 			}
 		};
 
@@ -388,7 +389,7 @@ export default function WeatherScreen() {
 	// Fetch weather data
 	useEffect(() => {
 		const callPython = async () => {
-			const response = await fetch("https://will-it-rain-on-my-parade-ecc0.onrender.com/getWeather", {
+			const response = await fetch("http://localhost:5000/getWeather", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
@@ -400,16 +401,29 @@ export default function WeatherScreen() {
 				}),
 			});
 			let res = await response.json();
-			res.temp = res.temp_c;
-			delete res.temp_c;
-			res.precipitation = res.total_precipitation;
-			delete res.total_precipitation;
-			res.wind = res.windspeed;
-			delete res.windspeed;
-			res.humidity = res.QSH;
-			delete res.QSH;
-			res.cloudCover = res.TAUTOT;
-			delete res.TAUTOT;
+
+			for (let key in res) {
+				if (res.hasOwnProperty(key)) {
+					let entry = res[key];
+					entry.temp = entry.temp_c;
+					delete entry.temp_c;
+					
+					entry.precipitation = entry.total_precipitation;
+					delete entry.total_precipitation;
+
+					entry.wind = entry.windspeed;
+					delete entry.windspeed;
+
+					entry.humidity = entry.QSH;
+					delete entry.QSH;
+
+					entry.cloudCover = entry.TAUTOT;
+					delete entry.TAUTOT;
+
+					entry.snowfall = entry.snowfall;
+					delete entry.snowfall;
+				}
+			}
 			// setWeatherData(await response.json());
 			setWeatherData(res);
 		};
@@ -444,7 +458,7 @@ export default function WeatherScreen() {
 				snowChance: avg(items.map(w => w.snowChance)),
 				precipitation: avg(items.map(w => w.precipitation)),
 				wind: avg(items.map(w => w.wind)),
-				uvIndex: avg(items.map(w => w.uvIndex)),
+				// uvIndex: avg(items.map(w => w.uvIndex)),
 				humidity: avg(items.map(w => w.humidity)),
 				cloudCover: avg(items.map(w => w.cloudCover)),
 			} as WeatherData));
@@ -455,12 +469,12 @@ export default function WeatherScreen() {
 					case "coldest": return curr.temp < prev.temp ? curr : prev;
 					case "windiest": return curr.wind > prev.wind ? curr : prev;
 					case "leastWindy": return curr.wind < prev.wind ? curr : prev;
-					case "rainiest": return (curr.rainChance + curr.snowChance) > (prev.rainChance + prev.snowChance) ? curr : prev;
-					case "leastRainy": return (curr.rainChance + curr.snowChance) < (prev.rainChance + prev.snowChance) ? curr : prev;
+					// case "rainiest": return (curr.rainChance + curr.snowChance) > (prev.rainChance + prev.snowChance) ? curr : prev;
+					// case "leastRainy": return (curr.rainChance + curr.snowChance) < (prev.rainChance + prev.snowChance) ? curr : prev;
 					case "wettest": return curr.precipitation > prev.precipitation ? curr : prev;
 					case "driest": return curr.precipitation < prev.precipitation ? curr : prev;
-					case "highestUV": return curr.uvIndex > prev.uvIndex ? curr : prev;
-					case "lowestUV": return curr.uvIndex < prev.uvIndex ? curr : prev;
+					// case "highestUV": return curr.uvIndex > prev.uvIndex ? curr : prev;
+					// case "lowestUV": return curr.uvIndex < prev.uvIndex ? curr : prev;
 					case "mostHumid": return curr.humidity > prev.humidity ? curr : prev;
 					case "leastHumid": return curr.humidity < prev.humidity ? curr : prev;
 					case "cloudiest": return curr.cloudCover > prev.cloudCover ? curr : prev;
@@ -483,7 +497,7 @@ export default function WeatherScreen() {
 				snowChance: 0,
 				precipitation: 0,
 				wind: 0,
-				uvIndex: 0,
+				// uvIndex: 0,
 				humidity: 0,
 				cloudCover: 0,
 				date,
@@ -500,11 +514,11 @@ export default function WeatherScreen() {
 		const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
 		const weatherAvg: WeatherData = {
 			temp: avg(matches.map(w => w.temp)),
-			rainChance: avg(matches.map(w => w.rainChance)),
-			snowChance: avg(matches.map(w => w.snowChance)),
+			rainChance: (matches.filter(w => w.precipitation > 0).length / matches.length) * 100,
+			snowChance: (matches.filter(w => w.snowfall ? (w.snowfall > 0) : 0).length / matches.length) * 100,
 			precipitation: avg(matches.map(w => w.precipitation)),
 			wind: avg(matches.map(w => w.wind)),
-			uvIndex: avg(matches.map(w => w.uvIndex)),
+			// uvIndex: avg(matches.map(w => w.uvIndex)),
 			humidity: avg(matches.map(w => w.humidity)),
 			cloudCover: avg(matches.map(w => w.cloudCover)),
 			date,
@@ -576,14 +590,14 @@ export default function WeatherScreen() {
 					"Unit": useMiles ? "mph" : "m/s",
 				}
 			},
-			{
-				key: "UV Index",
-				value: weather.uvIndex,
-				details: {
-					"Range": "0-11+",
-					"Protection Needed": weather.uvIndex > 6 ? "High - Use sun protection" : "Moderate"
-				}
-			},
+			// {
+			// 	key: "UV Index",
+			// 	value: weather.uvIndex,
+			// 	details: {
+			// 		"Range": "0-11+",
+			// 		"Protection Needed": weather.uvIndex > 6 ? "High - Use sun protection" : "Moderate"
+			// 	}
+			// },
 			{
 				key: useDewPoint ? "Dew Point" : "Humidity",
 				value: convertHumidity(weather.humidity),
@@ -592,10 +606,10 @@ export default function WeatherScreen() {
 				},
 			},
 			{
-				key: "Cloud Cover",
-				value: weather.cloudCover.toFixed(1),
+				key: "Sky",
+				value: weather.cloudCover,
 				details: {
-					"Unit": "%"
+					"Description": "Sky is clear or not, which is show in cloud optical thickness of all clouds"
 				}
 			},
 		];
@@ -638,19 +652,26 @@ export default function WeatherScreen() {
 			outputRange: [0, 1],
 		});
 
-		const showChart = ["Temperature", "Precipitation Amount", "Wind Speed", "UV Index", "Humidity", "Cloud Cover"].includes(item.key) &&
+		const showChart = ["Temperature", "Precipitation Amount", "Wind Speed", "UV Index", "Humidity", "Sky"].includes(item.key) &&
 			weatherList.length > 1 &&
 			isExpanded;
 
 		let chartData = null;
 		let yAxisSuffix = "";
 
+		
 		if (showChart) {
+			const label = weatherList.map((w, i) => {
+				if (!w.date) return "";
+				const year = w.date.split("-")[0];
+				return i === 0 ? year : year.slice(-2);
+			});
+
 			switch (item.key) {
 				case "Temperature":
 					yAxisSuffix = useFahrenheit ? "°F" : "°C";
 					chartData = {
-						labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
+						labels: label,
 						datasets: [{
 							data: weatherList.map(w => useFahrenheit ? w.temp * 1.8 + 32 : w.temp),
 							color: () => "#00BFFF",
@@ -661,7 +682,7 @@ export default function WeatherScreen() {
 				case "Precipitation Amount":
 					yAxisSuffix = useMiles ? "in" : "mm";
 					chartData = {
-						labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
+						labels: label,
 						datasets: [{
 							data: weatherList.map(w => useMiles ? w.precipitation * 0.03937 : w.precipitation),
 							color: () => "#00BFFF",
@@ -672,7 +693,7 @@ export default function WeatherScreen() {
 				case "Wind Speed":
 					yAxisSuffix = useMiles ? "mph" : "m/s";
 					chartData = {
-						labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
+						labels: label,
 						datasets: [{
 							data: weatherList.map(w => w.wind),
 							color: () => "#FF8C00",
@@ -680,21 +701,21 @@ export default function WeatherScreen() {
 						}],
 					};
 					break;
-				case "UV Index":
-					yAxisSuffix = "";
-					chartData = {
-						labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
-						datasets: [{
-							data: weatherList.map(w => w.uvIndex),
-							color: () => "#9400D3",
-							strokeWidth: 2,
-						}],
-					};
-					break;
+				// case "UV Index":
+				// 	yAxisSuffix = "";
+				// 	chartData = {
+				// 		labels: label,
+				// 		datasets: [{
+				// 			data: weatherList.map(w => w.uvIndex),
+				// 			color: () => "#9400D3",
+				// 			strokeWidth: 2,
+				// 		}],
+				// 	};
+				// 	break;
 				case "Humidity":
 					yAxisSuffix = useDewPoint ? "°C" : "%";
 					chartData = {
-						labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
+						labels: label,
 						datasets: [{
 							data: weatherList.map(w => useDewPoint ? magnusDewPoint(w.temp, w.humidity) : w.humidity),
 							color: () => "#1E90FF",
@@ -702,10 +723,10 @@ export default function WeatherScreen() {
 						}],
 					};
 					break;
-				case "Cloud Cover":
+				case "Sky":
 					yAxisSuffix = "%";
 					chartData = {
-						labels: weatherList.map(w => w.date ? w.date.split("-")[0] : ""),
+						labels: label,
 						datasets: [{
 							data: weatherList.map(w => w.cloudCover),
 							color: () => "#A9A9A9",
