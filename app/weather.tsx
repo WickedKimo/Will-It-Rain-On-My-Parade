@@ -197,16 +197,44 @@ export default function WeatherScreen() {
 
 	// Calculation functions - memoized
 	const steadmanApparentTemp = useCallback((tempC: number, humidity: number, wind: number) => {
-		const e = (humidity / 100) * 6.105 * Math.exp((17.27 * tempC) / (237.7 + tempC));
+		const e = (toRH(tempC, humidity) / 100) * 6.105 * Math.exp((17.27 * tempC) / (237.7 + tempC));
 		return 1.04 * tempC + 0.2 * e - 0.65 * wind - 2.7;
 	}, []);
 
-	const magnusDewPoint = useCallback((tempC: number, humidity: number) => {
-		const a = 17.27;
-		const b = 237.7;
-		const safe_humidity = Math.min(Math.max(humidity, 1), 100);
-		const alpha = ((a * tempC) / (b + tempC)) + Math.log(safe_humidity / 100);
-		return (b * alpha) / (a - alpha);
+	const toRH = useCallback((tempC: number, q_gpkg: number) => {
+		const eps = 0.622;
+		const a = 17.67;
+		const b = 243.5;
+
+		const q = q_gpkg / 1000.0;
+
+		const p = 1013.25 * 100.0;
+
+		const e_pa = (q * p) / (eps + q * (1.0 - eps));
+		const es_pa = 6.112 * 100.0 * Math.exp((a * tempC) / (b + tempC));
+
+		const RH = (e_pa / es_pa) * 100;
+
+		return Math.min(Math.max(RH, 0), 100);
+	}, []);
+
+	const magnusDewPoint = useCallback((tempC: number, q_gpkg: number) => {
+		const eps = 0.622;
+		const a = 17.67;
+		const b = 243.5;
+
+		const q = q_gpkg / 1000.0;
+
+		const p = 1013.25 * 100.0;
+
+		const e_pa = (q * p) / (eps + q * (1.0 - eps));
+		const e_hpa = e_pa / 100.0;
+
+		if (e_hpa <= 0) return NaN;
+		const lnRatio = Math.log(e_hpa / 6.112);
+		const Td = (b * lnRatio) / (a - lnRatio);
+
+		return Td; // °C
 	}, []);
 
 	// Conversion functions - memoized
@@ -229,6 +257,12 @@ export default function WeatherScreen() {
 		if (!weather) return "0.0";
 		return (useDewPoint ? Number(convertTemp(magnusDewPoint(weather.temp, val))) : val).toFixed(1);
 	}, [useDewPoint, convertTemp, magnusDewPoint, weather]);
+
+	const convertSky = useCallback((val: number) => {
+		if (val < 5) return "Clear";
+		if (val < 20) return "Partly Cloudy";
+		return "Mostly Cloudy";
+	}, []);
 
 	// Share functions
 	const shareAsJson = useCallback(async () => {
@@ -255,7 +289,7 @@ export default function WeatherScreen() {
 				temperature: useFahrenheit ? "°F" : "°C",
 				precipitation: useMiles ? "inches" : "mm",
 				wind_speed: useMiles ? "mph" : "m/s",
-				humidity: useDewPoint ? (useFahrenheit ? "°F (Dew Point)" : "°C (Dew Point)") : "%"
+				humidity: useDewPoint ? (useFahrenheit ? "°F (Dew Point)" : "°C (Dew Point)") : "g/kg"
 			},
 			summary: {
 				average_temperature: Number(convertTemp(weather.temp)),
@@ -338,11 +372,11 @@ export default function WeatherScreen() {
 			metadata.unit.dewPoint_unit = useFahrenheit ? "°F" : "°C";
 		} else {
 			metadata.summary.humidity = Number(weather.humidity);
-			metadata.unit.humidity_unit = "%";
+			metadata.unit.humidity_unit = "g/kg";
 		}
 
 		metadata.summary.cloudCover = Number(weather.cloudCover),
-		metadata.unit.cloudCover_unit = "%"
+		metadata.unit.cloudCover_unit = ""
 		
 		const blob = new Blob([JSON.stringify(metadata, null, 2)], {
 			type: "application/json",
@@ -368,7 +402,7 @@ export default function WeatherScreen() {
 	]);
 
 	const downloadScreenshotWeb = useCallback(async () => {
-		alert("Please use the web browser's built-in screenshot function (e.g. Print to PDF) to capture the content.");
+		alert("This is in FUTURE WORK. Please use the web browser's built-in screenshot function (e.g. Print to PDF) to capture the content.");
 	}, []);
 
 	// Load preferences
@@ -599,17 +633,18 @@ export default function WeatherScreen() {
 			// 	}
 			// },
 			{
-				key: useDewPoint ? "Dew Point" : "Humidity",
+				key: useDewPoint ? "Dew Point" : "Effective Surface Specific Humidity",
 				value: convertHumidity(weather.humidity),
 				details: {
-					"Unit": useDewPoint ? (useFahrenheit ? "°F" : "°C") : "%",
+					"Unit": useDewPoint ? (useFahrenheit ? "°F" : "°C") : "g/kg",
 				},
 			},
 			{
 				key: "Sky",
-				value: weather.cloudCover,
+				value: convertSky(weather.cloudCover),
 				details: {
-					"Description": "Sky is clear or not, which is show in cloud optical thickness of all clouds"
+					"Description": "Sky is clear or not.",
+					"Cloud optical thickness of all clouds": weather.cloudCover.toFixed(1),
 				}
 			},
 		];
@@ -652,7 +687,7 @@ export default function WeatherScreen() {
 			outputRange: [0, 1],
 		});
 
-		const showChart = ["Temperature", "Precipitation Amount", "Wind Speed", "UV Index", "Humidity", "Sky"].includes(item.key) &&
+		const showChart = ["Temperature", "Precipitation Amount", "Wind Speed", "UV Index", "Effective Surface Specific Humidity", "Sky"].includes(item.key) &&
 			weatherList.length > 1 &&
 			isExpanded;
 
@@ -712,8 +747,8 @@ export default function WeatherScreen() {
 				// 		}],
 				// 	};
 				// 	break;
-				case "Humidity":
-					yAxisSuffix = useDewPoint ? "°C" : "%";
+				case "Effective Surface Specific Humidity":
+					yAxisSuffix = useDewPoint ? "°C" : "g/kg";
 					chartData = {
 						labels: label,
 						datasets: [{
@@ -724,7 +759,7 @@ export default function WeatherScreen() {
 					};
 					break;
 				case "Sky":
-					yAxisSuffix = "%";
+					yAxisSuffix = "";
 					chartData = {
 						labels: label,
 						datasets: [{
