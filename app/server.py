@@ -1,8 +1,16 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import random
+
+import numpy as np
+import pandas as pd
+
+import os
+import glob
+import traceback
+
 
 NASA_DATA_ROOT = "C:/User/users/Desktop/NASA/merged/"
 app = Flask(__name__)
@@ -190,7 +198,10 @@ def get_25y_weather_data(lat_q: float, lon_q: float, month: int, day: int, root_
                 continue
             
             date_str = pd.to_datetime(df["date"].iloc[0]).strftime("%Y-%m-%d")
+            lat_q = float(lat_q)
+            lon_q = float(lon_q)
             res = bilinear_from_dataframe(df, lat_q, lon_q, var_cols=var_cols, date_str=date_str)
+
 
             rec_in = {k: v for k, v in res.items()
                       if k not in ("method", "lat_bounds", "lon_bounds", "corners", "tx", "ty", "lat", "lon")}
@@ -199,14 +210,20 @@ def get_25y_weather_data(lat_q: float, lon_q: float, month: int, day: int, root_
             if used_fallback_0228:
                 payload["used_fallback_0228"] = True
 
-            key = f"{lat_q:.4f}_{lon_q:.4f}_{date_str}"
+            # key = f"{lat_q:.4f}_{lon_q:.4f}_{date_str}"
+
+            year = int(date_str.split("-")[0])
+            key = year
+            
             output_obj[key] = payload
 
         except Exception as e:
             # 在伺服器環境中，印出錯誤日誌可能比靜默跳過更好
             print(f"Error processing file for date {y}-{m}-{dd}: {e}")
+            traceback.print_exc()
             pass
 
+    print(output_obj)
     return output_obj
 
 @app.route("/getWeather", methods=["POST"])
@@ -235,6 +252,7 @@ def get_weather():
         with open(filename, "w") as f:
             json.dump(weather, f, indent=2)
 
+    print(weather)
     return jsonify(weather)
 
 if __name__ == "__main__":
