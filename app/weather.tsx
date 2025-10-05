@@ -38,8 +38,7 @@ type WeatherData = {
 
 type HighlightMetric =
 	| "hottest" | "coldest" | "windiest" | "leastWindy"
-	| "rainiest" | "leastRainy" | "wettest" | "driest"
-	| "highestUV" | "lowestUV" | "mostHumid" | "leastHumid"
+	| "rainiest" | "leastRainy" | "wettest" | "driest"| "mostHumid" | "leastHumid"
 	| "cloudiest" | "clearest";
 
 const highlightOptions: [string, HighlightMetric][] = [
@@ -51,8 +50,8 @@ const highlightOptions: [string, HighlightMetric][] = [
 	["Driest Day", "leastRainy"],
 	["Wettest Day", "wettest"],
 	["Least Wet Day", "driest"],
-	["Highest UV Index", "highestUV"],
-	["Lowest UV Index", "lowestUV"],
+	// ["Highest UV Index", "highestUV"],
+	// ["Lowest UV Index", "lowestUV"],
 	["Most Humid Day", "mostHumid"],
 	["Least Humid Day", "leastHumid"],
 	["Cloudiest Day", "cloudiest"],
@@ -687,7 +686,7 @@ export default function WeatherScreen() {
 			outputRange: [0, 1],
 		});
 
-		const showChart = ["Temperature", "Precipitation Amount", "Wind Speed", "UV Index", "Effective Surface Specific Humidity", "Sky"].includes(item.key) &&
+		const showChart = ["Temperature", "Precipitation Amount", "Wind Speed", "Effective Surface Specific Humidity", "Sky"].includes(item.key) &&
 			weatherList.length > 1 &&
 			isExpanded;
 
