@@ -1,4 +1,4 @@
-// map.tsx - Full screen map with floating controls
+// map.tsx - Full screen map with area selection support
 import * as Location from 'expo-location';
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
@@ -20,7 +20,7 @@ interface SearchSuggestion {
 }
 
 export default function Map() {
-    const [selectMode, setSelectMode] = useState(false);
+    const [selectMode, setSelectMode] = useState<'point' | 'area' | null>(null);
     const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
     const [searchText, setSearchText] = useState('');
     const [userLocation, setUserLocation] = useState<LocationData | null>(null);
@@ -87,6 +87,15 @@ export default function Map() {
             setShowSuggestions(results.length > 0);
         } catch (error) {
             console.error('Search suggestions error:', error);
+        }
+    };
+
+    const toggleAreaSelect = () => {
+        if (Platform.OS !== "web") {
+            webviewRef.current?.injectJavaScript(`window.toggleAreaSelect();`);
+        } else {
+            const iframe: any = document.getElementById("mapframe");
+            iframe.contentWindow.toggleAreaSelect?.();
         }
     };
 
@@ -284,6 +293,15 @@ export default function Map() {
           border-radius: 50%;
           box-shadow: 0 2px 6px rgba(0,0,0,0.3);
         }
+        
+        .area-info {
+          background: #e3f2fd;
+          padding: 10px;
+          border-radius: 8px;
+          margin-bottom: 12px;
+          font-size: 13px;
+          color: #0d47a1;
+        }
       </style>
     </head>
     <body>
@@ -291,10 +309,11 @@ export default function Map() {
       
       <div class="location-popup" id="locationPopup">
         <div class="popup-title">
-          <span>📍</span>
-          <span>Selected Location</span>
+          <span id="popupIcon">📍</span>
+          <span id="popupTitleText">Selected Location</span>
         </div>
         <div class="popup-coords" id="popupCoords"></div>
+        <div class="area-info" id="areaInfo" style="display:none;"></div>
         <div class="popup-address" id="popupAddress"></div>
         
         <div class="date-section">
@@ -344,11 +363,14 @@ export default function Map() {
           attribution:''
         }).addTo(map);
         
-        var selectMode = false;
+        var selectMode = null;
         var marker = null;
         var userMarker = null;
         var selectedLocation = null;
         var dateMode = 'single';
+        var rectangle = null;
+        var rectangleStart = null;
+        var isDrawing = false;
         
         const today = new Date().toISOString().split('T')[0];
         document.getElementById('singleDate').min = today;
@@ -372,9 +394,24 @@ export default function Map() {
         
         addUserLocationMarker(${userLocation?.latitude || 25.0330}, ${userLocation?.longitude || 121.5654});
         
-        window.toggleSelect = function() { 
-          selectMode = !selectMode; 
-          document.getElementById('map').style.cursor = selectMode ? 'crosshair' : 'grab';
+        window.togglePointSelect = function() { 
+          selectMode = selectMode === 'point' ? null : 'point';
+          document.getElementById('map').style.cursor = selectMode === 'point' ? 'crosshair' : 'grab';
+          
+          var toggleData = {
+            type: 'selectModeChanged',
+            selectMode: selectMode
+          };
+          if(window.ReactNativeWebView){
+            window.ReactNativeWebView.postMessage(JSON.stringify(toggleData));
+          } else {
+            parent.postMessage(JSON.stringify(toggleData), '*');
+          }
+        }
+        
+        window.toggleAreaSelect = function() {
+          selectMode = selectMode === 'area' ? null : 'area';
+          document.getElementById('map').style.cursor = selectMode === 'area' ? 'crosshair' : 'grab';
           
           var toggleData = {
             type: 'selectModeChanged',
@@ -453,13 +490,172 @@ export default function Map() {
           return isValid;
         };
         
+        var startLatLng = null;
+        var temporaryRectangle = null;
+        
+        // 統一處理函數
+        function handleDrawStart(latlng) {
+          if (selectMode !== 'area') return false;
+          
+          isDrawing = true;
+          startLatLng = latlng;
+          rectangleStart = latlng;
+          
+          if (rectangle) map.removeLayer(rectangle);
+          if (marker) map.removeLayer(marker);
+          if (temporaryRectangle) map.removeLayer(temporaryRectangle);
+          
+          rectangle = null;
+          marker = null;
+          temporaryRectangle = null;
+          
+          return false;
+        }
+        
+        function handleDrawMove(latlng) {
+          if (!isDrawing || selectMode !== 'area' || !startLatLng) return;
+          
+          if (temporaryRectangle) map.removeLayer(temporaryRectangle);
+          
+          temporaryRectangle = L.rectangle([startLatLng, latlng], {
+            color: '#667eea',
+            weight: 2,
+            fillOpacity: 0.2,
+            dashArray: '5, 5'
+          }).addTo(map);
+        }
+        
+        function handleDrawEnd(latlng) {
+          if (!isDrawing || selectMode !== 'area' || !startLatLng) return;
+          
+          isDrawing = false;
+          
+          if (temporaryRectangle) {
+            map.removeLayer(temporaryRectangle);
+            temporaryRectangle = null;
+          }
+          
+          // 檢查是否拖曳距離太小
+          var latDiff = Math.abs(latlng.lat - startLatLng.lat);
+          var lngDiff = Math.abs(latlng.lng - startLatLng.lng);
+          
+          if (latDiff < 0.001 && lngDiff < 0.001) {
+            startLatLng = null;
+            return;
+          }
+          
+          rectangle = L.rectangle([startLatLng, latlng], {
+            color: '#667eea',
+            weight: 2,
+            fillOpacity: 0.2
+          }).addTo(map);
+          
+          var bounds = L.latLngBounds(startLatLng, latlng);
+          var center = bounds.getCenter();
+          
+          selectedLocation = { 
+            latitude: center.lat, 
+            longitude: center.lng,
+            isArea: true,
+            bounds: {
+              north: bounds.getNorth(),
+              south: bounds.getSouth(),
+              east: bounds.getEast(),
+              west: bounds.getWest()
+            }
+          };
+          
+          showLocationPopup(center.lat, center.lng, true, bounds);
+          reverseGeocode(center.lat, center.lng);
+          
+          var data = {
+            type: 'areaSelected',
+            center: { lat: center.lat, lng: center.lng },
+            bounds: selectedLocation.bounds
+          };
+          
+          if(window.ReactNativeWebView){
+            window.ReactNativeWebView.postMessage(JSON.stringify(data));
+          } else {
+            parent.postMessage(JSON.stringify(data), '*');
+          }
+          
+          startLatLng = null;
+          window.toggleAreaSelect();
+        }
+        
+        // 滑鼠事件
+        map.on('mousedown', function(e) {
+          if (selectMode === 'area') {
+            L.DomEvent.preventDefault(e.originalEvent);
+            handleDrawStart(e.latlng);
+          }
+        });
+        
+        map.on('mousemove', function(e) {
+          handleDrawMove(e.latlng);
+        });
+        
+        map.on('mouseup', function(e) {
+          handleDrawEnd(e.latlng);
+        });
+        
+        // 觸控事件 - 關鍵修復!
+        var mapContainer = map.getContainer();
+        
+        mapContainer.addEventListener('touchstart', function(e) {
+          if (selectMode !== 'area') return;
+          
+          var touch = e.touches[0];
+          var containerPoint = L.point(touch.clientX, touch.clientY);
+          var layerPoint = map.containerPointToLayerPoint(containerPoint);
+          var latlng = map.layerPointToLatLng(layerPoint);
+          
+          e.preventDefault();
+          e.stopPropagation();
+          
+          handleDrawStart(latlng);
+        }, { passive: false });
+        
+        mapContainer.addEventListener('touchmove', function(e) {
+          if (!isDrawing || selectMode !== 'area') return;
+          
+          var touch = e.touches[0];
+          var containerPoint = L.point(touch.clientX, touch.clientY);
+          var layerPoint = map.containerPointToLayerPoint(containerPoint);
+          var latlng = map.layerPointToLatLng(layerPoint);
+          
+          e.preventDefault();
+          e.stopPropagation();
+          
+          handleDrawMove(latlng);
+        }, { passive: false });
+        
+        mapContainer.addEventListener('touchend', function(e) {
+          if (!isDrawing || selectMode !== 'area') return;
+          
+          var touch = e.changedTouches[0];
+          var containerPoint = L.point(touch.clientX, touch.clientY);
+          var layerPoint = map.containerPointToLayerPoint(containerPoint);
+          var latlng = map.layerPointToLatLng(layerPoint);
+          
+          e.preventDefault();
+          e.stopPropagation();
+          
+          handleDrawEnd(latlng);
+        }, { passive: false });
+        
         map.on('click', function(e){
-          if(!selectMode) return;
+          if(selectMode !== 'point') return;
           
           const data = { lat: e.latlng.lat, lng: e.latlng.lng };
           
           if(marker){
             map.removeLayer(marker);
+          }
+          if(rectangle){
+            map.removeLayer(rectangle);
+            rectangle = null;
           }
           
           var icon = L.divIcon({
@@ -471,9 +667,9 @@ export default function Map() {
           
           marker = L.marker([data.lat, data.lng], { icon: icon }).addTo(map);
           
-          selectedLocation = { latitude: data.lat, longitude: data.lng };
+          selectedLocation = { latitude: data.lat, longitude: data.lng, isArea: false };
           
-          showLocationPopup(data.lat, data.lng);
+          showLocationPopup(data.lat, data.lng, false);
           reverseGeocode(data.lat, data.lng);
           
           if(window.ReactNativeWebView){
@@ -482,12 +678,25 @@ export default function Map() {
             parent.postMessage(JSON.stringify(data), '*');
           }
           
-          window.toggleSelect();
+          window.togglePointSelect();
         });
         
-        function showLocationPopup(lat, lng) {
+        function showLocationPopup(lat, lng, isArea, bounds) {
+          document.getElementById('popupIcon').textContent = isArea ? '🗺️' : '📍';
+          document.getElementById('popupTitleText').textContent = isArea ? 'Selected Area' : 'Selected Location';
           document.getElementById('popupCoords').textContent = 
-            \`Lat: \${lat.toFixed(6)} | Lon: \${lng.toFixed(6)}\`;
+            \`Center: \${lat.toFixed(6)}, \${lng.toFixed(6)}\`;
+          
+          if (isArea && bounds) {
+            const areaInfo = document.getElementById('areaInfo');
+            const latSpan = (bounds.getNorth() - bounds.getSouth()).toFixed(4);
+            const lngSpan = (bounds.getEast() - bounds.getWest()).toFixed(4);
+            areaInfo.innerHTML = \`Area bounds: N \${bounds.getNorth().toFixed(4)}° - S \${bounds.getSouth().toFixed(4)}°, E \${bounds.getEast().toFixed(4)}° - W \${bounds.getWest().toFixed(4)}°<br>Span: \${latSpan}° × \${lngSpan}°\`;
+            areaInfo.style.display = 'block';
+          } else {
+            document.getElementById('areaInfo').style.display = 'none';
+          }
+          
           document.getElementById('popupAddress').textContent = 'Loading address...';
           document.getElementById('locationPopup').classList.add('show');
           validateDates();
@@ -518,6 +727,10 @@ export default function Map() {
             map.removeLayer(marker);
             marker = null;
           }
+          if (rectangle) {
+            map.removeLayer(rectangle);
+            rectangle = null;
+          }
           selectedLocation = null;
           document.getElementById('locationPopup').classList.remove('show');
           
@@ -544,8 +757,13 @@ export default function Map() {
             latitude: selectedLocation.latitude,
             longitude: selectedLocation.longitude,
             address: selectedLocation.address,
-            dateMode: dateMode
+            dateMode: dateMode,
+            isArea: selectedLocation.isArea || false
           };
+          
+          if (selectedLocation.isArea && selectedLocation.bounds) {
+            weatherData.areaBounds = selectedLocation.bounds;
+          }
           
           if (dateMode === 'single') {
             weatherData.date = document.getElementById('singleDate').value;
@@ -573,7 +791,7 @@ export default function Map() {
               if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
                 map.setView([lat, lng], 15);
                 var clickEvent = { latlng: { lat: lat, lng: lng } };
-                selectMode = true;
+                selectMode = 'point';
                 map.fire('click', clickEvent);
                 return;
               }
@@ -591,7 +809,7 @@ export default function Map() {
               
               map.setView([lat, lng], 15);
               var clickEvent = { latlng: { lat: lat, lng: lng } };
-              selectMode = true;
+              selectMode = 'point';
               map.fire('click', clickEvent);
             } else {
               var errorData = {
@@ -641,8 +859,16 @@ export default function Map() {
                     location: locationString,
                     latitude: data.latitude.toString(),
                     longitude: data.longitude.toString(),
-                    dateMode: data.dateMode || 'single'
+                    dateMode: data.dateMode || 'single',
+                    isArea: data.isArea ? 'true' : 'false'
                 };
+
+                if (data.isArea && data.areaBounds) {
+                    params.areaNorth = data.areaBounds.north.toString();
+                    params.areaSouth = data.areaBounds.south.toString();
+                    params.areaEast = data.areaBounds.east.toString();
+                    params.areaWest = data.areaBounds.west.toString();
+                }
 
                 if (data.dateMode === 'single') {
                     params.date = data.date;
@@ -661,12 +887,15 @@ export default function Map() {
                 setSearchText("");
                 setShowSuggestions(false);
                 setCoords(null);
-                setSelectMode(false);
+                setSelectMode(null);
             } else if (data.type === 'selectModeChanged') {
                 setSelectMode(data.selectMode);
+            } else if (data.type === 'areaSelected') {
+                setCoords(data.center);
+                setSelectMode(null);
             } else if (data.lat && data.lng) {
                 setCoords({ lat: data.lat, lng: data.lng });
-                setSelectMode(false);
+                setSelectMode(null);
             }
         } catch (e) {
             console.error('Message parsing error:', e);
@@ -712,24 +941,23 @@ export default function Map() {
         }
     };
 
-    const toggleSelectMode = () => {
+    const togglePointSelect = () => {
         if (Platform.OS !== "web") {
-            webviewRef.current?.injectJavaScript(`window.toggleSelect();`);
+            webviewRef.current?.injectJavaScript(`window.togglePointSelect();`);
         } else {
             const iframe: any = document.getElementById("mapframe");
-            iframe.contentWindow.toggleSelect?.();
+            iframe.contentWindow.togglePointSelect?.();
         }
     };
 
     return (
         <View style={styles.container}>
-            <StatusBar 
-                barStyle="dark-content" 
-                backgroundColor="transparent" 
-                translucent 
+            <StatusBar
+                barStyle="dark-content"
+                backgroundColor="transparent"
+                translucent
             />
-            
-            {/* Full screen map */}
+
             <View style={styles.mapContainer}>
                 {Platform.OS === "web" ? (
                     <iframe
@@ -760,7 +988,6 @@ export default function Map() {
                 )}
             </View>
 
-            {/* Floating controls */}
             <View style={[styles.floatingControls, { top: insets.top + 10 }]}>
                 <View style={styles.searchWrapper}>
                     <View style={styles.searchContainer}>
@@ -816,24 +1043,34 @@ export default function Map() {
                     onPress={goToUserLocation}
                     activeOpacity={0.7}
                 >
-                    <Text style={styles.locationButtonText}>📍</Text>
+                    <Text style={styles.locationButtonText}>🎯</Text>
                 </TouchableOpacity>
             </View>
 
-            {/* Floating select button */}
-            <TouchableOpacity
-                style={[styles.selectButton, { bottom: insets.bottom + 20 }]}
-                onPress={toggleSelectMode}
-                activeOpacity={0.8}
-            >
-                <Text style={styles.selectButtonText}>
-                    {selectMode ? "✕" : "📌"}
-                </Text>
-            </TouchableOpacity>
+            <View style={[styles.selectButtons, { bottom: insets.bottom + 20 }]}>
+                <TouchableOpacity
+                    style={[styles.selectButton, selectMode === 'point' && styles.selectButtonActive]}
+                    onPress={togglePointSelect}
+                    activeOpacity={0.8}
+                >
+                    <Text style={styles.selectButtonText}>
+                        {selectMode === 'point' ? "✕" : "📌"}
+                    </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={[styles.selectButton, selectMode === 'area' && styles.selectButtonActive]}
+                    onPress={toggleAreaSelect}
+                    activeOpacity={0.8}
+                >
+                    <Text style={styles.selectButtonText}>
+                        {selectMode === 'area' ? "✕" : "🗺️"}
+                    </Text>
+                </TouchableOpacity>
+            </View>
         </View>
     );
 }
-
 const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -940,9 +1177,14 @@ const styles = StyleSheet.create({
     locationButtonText: {
         fontSize: 16,
     },
-    selectButton: {
+    selectButtons: {
         position: 'absolute',
         right: 20,
+        flexDirection: 'column',
+        gap: 12,
+        zIndex: 999,
+    },
+    selectButton: {
         width: 56,
         height: 56,
         borderRadius: 28,
@@ -954,7 +1196,9 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.3,
         shadowRadius: 8,
         elevation: 8,
-        zIndex: 999,
+    },
+    selectButtonActive: {
+        backgroundColor: '#FF4444',
     },
     selectButtonText: {
         fontSize: 24,
